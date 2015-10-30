@@ -1,135 +1,150 @@
 extern crate clock_ticks;
-extern crate glium;
 extern crate rand;
-
-
-use glium::{Display, DisplayBuild, Surface};
+extern crate sdl2;
 
 use rand::distributions::{IndependentSample, Range};
 
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::keyboard::Scancode;
+use sdl2::rect::Rect;
+use sdl2::render::Renderer;
+use sdl2::Sdl;
+use sdl2::TimerSubsystem;
+use sdl2::VideoSubsystem;
+ 
 use std::default::Default;
 use std::f32;
 use std::path::Path;
 use std::thread;
 
+pub const FPS: u32 = 40;
+pub const SCREEN_WIDTH: f32 = 600.;
+pub const SCREEN_HEIGHT: f32 = 300.;
+
+pub struct Ui {
+    sdl_ctx: Sdl,
+    renderer: Renderer<'static>
+}
+
+impl Ui {
+    pub fn new() -> Ui {
+        let sdl_ctx = sdl2::init().unwrap();
+        let video_subsystem = sdl_ctx.video().unwrap();
+        let window = video_subsystem.window("pong", 
+                SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+                .position_centered()
+                .build()
+                .unwrap();
+        let renderer = window.renderer().build().unwrap();
+        Ui {
+            sdl_ctx: sdl_ctx,
+            renderer: renderer
+        }  
+    } 
+
+    pub fn poll_event(&self) -> Option<Event> {
+        let mut event_pump = self.sdl_ctx.event_pump().unwrap();
+        return event_pump.poll_event();
+    }
+}
+
+pub struct Ball {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub speed: f32,
+    pub vx: f32,
+    pub vy: f32
+}
+
+impl Ball {
+    pub fn new() -> Ball {
+        let width = 10.;
+        let height = 10.;
+        // Place ball at center of screen. 
+        let x = (SCREEN_WIDTH - width) / 2.;
+        let y = (SCREEN_HEIGHT - height) / 2.;
+        let speed = 200.;
+        let mut rng = rand::thread_rng();
+        // Launch at an angle less than or equal to 45 degree.
+        let angle = Range::new(0., f32::consts::PI/4.).ind_sample(&mut rng);
+        let dir = [-1., 1.];
+        // Use the sine of the angle to determine the vertical speed. Then, 
+        // choose a direction (up or down) to select a vertical velocity.
+        let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+        let vy = angle.sin() * speed * up_or_down; 
+        let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+        // Use Pythagoras to determine the horizontal speed. Then, choose a
+        // direction (left or right) to a horizontal velocity.
+        let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
+        Ball {
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            speed: speed,
+            vx: vx,
+            vy: vy
+        }
+    }
+}
+
 pub struct Game {
-    display: Display,
-    fps: u32,
-    ball_velocity: u32,
-    paddle_velocity: u32,
+    ui: Ui,
+    ball: Ball
 }
 
 impl Game {
 
-    pub fn new(display: Display, fps: u32, ball_velocity: u32, paddle_velocity: u32) -> Game { 
+    /// Create initial game state. 
+    pub fn new() -> Game { 
         Game {
-            display: display,
-            fps: fps,
-            ball_velocity: ball_velocity,
-            paddle_velocity: paddle_velocity
+            ui: Ui::new(),
+            ball: Ball::new()
         }
     }
 
+    /// Start the game and block until finished. 
     pub fn start(&mut self) {
-        let mut t0_ms = clock_ticks::precise_time_ms(); 
+        let mut time_last_invocation = clock_ticks::precise_time_ms();
         loop {
-            let t1_ms = clock_ticks::precise_time_ms(); 
-            if self.update(t1_ms - t0_ms) == false { return; } 
-            let t2_ms = clock_ticks::precise_time_ms(); 
-            self.cap_fps(t2_ms - t1_ms);
-            t0_ms = t1_ms;
+            let time_this_invocation = clock_ticks::precise_time_ms();
+            let delta_time = time_this_invocation - time_last_invocation;
+            if self.update(delta_time as f32 / 1000.) == false { return; } 
+            self.cap_fps(delta_time);
+            time_last_invocation = time_this_invocation;
         } 
     }
 
-    fn update(&mut self, dt: u64) -> bool {
-        let mut target = self.display.draw();
-        target.clear_color(0.0, 0.0, 1.0, 1.0);
-        target.finish().unwrap();
-        for ev in self.display.poll_events() {
-            match ev {
-                glium::glutin::Event::Closed => return false,
-                _ => ()
-            }
-        }
+    /// Called once per frame. 
+    fn update(&mut self, dt_sec: f32) -> bool {
+        self.ui.poll_event();
+        let ball = &mut self.ball;
+        ball.x += ball.vx * dt_sec;
+        ball.y += ball.vy * dt_sec;
+        self.ui.renderer.clear();
+        let rect = Rect::new_unwrap(ball.x as i32, 
+                                    ball.y as i32, 
+                                    ball.width as u32,
+                                    ball.height as u32);
+        self.ui.renderer.fill_rect(rect);
+        self.ui.renderer.present();
         true
     }
 
+    // Ensure we run no faster than the desired fps by introducing
+    // a delay if necessary.
     fn cap_fps(&self, took_ms: u64) {
-        let max_ms = 1000 / self.fps as u64;
+        let max_ms = 1000 / FPS as u64;
         if max_ms > took_ms {
             thread::sleep_ms((max_ms - took_ms) as u32);
         }
     }
 }
 
-pub struct GameBuilder {
-    display_width: u32,
-    display_height: u32,
-    fps: u32,
-    ball_velocity: u32,
-    paddle_velocity: u32
-}
-
-impl Default for GameBuilder {
-    #[inline]
-    fn default() -> GameBuilder {
-        GameBuilder {
-            display_width: 600,
-            display_height: 300,
-            fps: 40,
-            ball_velocity: 5,
-            paddle_velocity: 10 
-        }
-    }
-}
-
-impl GameBuilder {
-
-    pub fn new() -> GameBuilder {
-        Default::default()
-    }
-
-    pub fn with_dimensions(mut self, width: u32, height: u32) -> GameBuilder {
-        self.display_width = width;
-        self.display_height = height;
-        self 
-    }
-
-    pub fn with_fps(mut self, fps: u32) -> GameBuilder {
-        self.fps = fps;
-        self
-    }
-
-    pub fn with_ball_velocity_pix_per_ms(mut self, ball_velocity: u32) -> 
-        GameBuilder {
-        self.ball_velocity = ball_velocity;
-        self
-    }
-
-    pub fn with_paddle_velocity_pix_per_ms(mut self, paddle_velocity: u32) -> 
-        GameBuilder {
-        self.paddle_velocity = paddle_velocity;
-        self
-    }
-
-    pub fn build(mut self) -> Game {
-        let display = glium::glutin::WindowBuilder::new()
-            .with_dimensions(self.display_width, self.display_height)
-            .with_title(format!("pong"))
-            .build_glium().unwrap();
-        Game::new(display,
-                  self.fps,
-                  self.ball_velocity,
-                  self.paddle_velocity)
-    } 
-}
-
 fn main() {
-    let mut game = GameBuilder::new()
-        .with_dimensions(600, 300)
-        .with_fps(40)
-        .with_ball_velocity_pix_per_ms(10)
-        .with_paddle_velocity_pix_per_ms(20)
-        .build();
+    let mut game = Game::new(); 
     game.start();
 }

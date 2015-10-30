@@ -11,6 +11,6 @@ name = "pong"
 path = "src/main.rs"
 
 [dependencies]
-glium = "0.10.0"
-rand = "0.3.8"
+sdl2 = "0.9.1"
+rand = "0.3.11"
 clock_ticks = "0.0.6"
