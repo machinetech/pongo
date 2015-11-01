@@ -52,7 +52,7 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new(x: f32, y: f32, width: f32, height: f32,
+    pub fn new(x: f32, y: f32, width: f32, height: f32, 
                speed: f32, vx: f32, vy: f32) -> Ball {
         Ball {
             x: x,
@@ -75,21 +75,39 @@ pub struct Paddle {
     pub score: u32
 }
 
+impl Paddle {
+    pub fn new(x: f32, y: f32, width: f32, height: f32, vy: f32, 
+               score: u32) -> Paddle {
+        Paddle {
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            vy: vy,
+            score: score}
+    }
+}
+
 pub struct Game {
     ui: Ui,
     fps: u32,
     ball: Ball,
+    lpaddle: Paddle,
+    rpaddle: Paddle,
     running: bool
 }
 
 impl Game {
 
     /// Create initial game state. 
-    pub fn new(ui: Ui, fps: u32, ball: Ball) -> Game { 
+    pub fn new(ui: Ui, fps: u32, ball: Ball, lpaddle: Paddle, 
+               rpaddle: Paddle) -> Game { 
         Game {
             ui: ui,
             fps: fps,
             ball: ball,
+            lpaddle: lpaddle,
+            rpaddle: rpaddle,
             running: false,
         }
     }
@@ -112,14 +130,7 @@ impl Game {
         self.handle_input();
         self.update_ball_position(dt_sec);
         self.check_for_ball_and_wall_collisions();
-        self.ui.renderer.clear();
-        let ball = &mut self.ball;
-        let rect = Rect::new_unwrap(ball.x as i32, 
-                                    ball.y as i32, 
-                                    ball.width as u32,
-                                    ball.height as u32);
-        self.ui.renderer.fill_rect(rect);
-        self.ui.renderer.present();
+        self.redraw()
     }
 
     fn handle_input(&mut self) {
@@ -168,6 +179,39 @@ impl Game {
             ball.y = self.ui.height - ball.height;
             ball.vy = -ball.vy;
         }
+    }
+
+    fn redraw(&mut self) {
+        // Clear the screen.
+        self.ui.renderer.clear();
+        
+        // Draw the ball.
+        let ball = &mut self.ball;
+        let ball_rect = Rect::new_unwrap(ball.x as i32, 
+                                    ball.y as i32, 
+                                    ball.width as u32,
+                                    ball.height as u32);
+        self.ui.renderer.fill_rect(ball_rect);
+
+        // Draw the left paddle.
+        let lpaddle = &mut self.lpaddle;
+        let lpaddle_rect = Rect::new_unwrap(lpaddle.x as i32, 
+                                    lpaddle.y as i32, 
+                                    lpaddle.width as u32,
+                                    lpaddle.height as u32);
+        self.ui.renderer.fill_rect(lpaddle_rect);
+
+
+        // Draw the right paddle.
+        let rpaddle = &mut self.rpaddle;
+        let rpaddle_rect = Rect::new_unwrap(rpaddle.x as i32, 
+                                    rpaddle.y as i32, 
+                                    rpaddle.width as u32,
+                                    rpaddle.height as u32);
+        self.ui.renderer.fill_rect(rpaddle_rect);
+
+        // Flip backbuffer to front.
+        self.ui.renderer.present();
     }
 
     // Ensure we run no faster than the desired fps by introducing
@@ -260,8 +304,32 @@ impl GameBuilder {
         Ball::new(x, y, width, height, speed, vx, vy)
     }    
 
+    fn create_left_paddle(&self) -> Paddle {
+        let width = 10.;
+        let height = 60.;
+        let x = 0.;
+        let y = (self.screen_height - height) / 2.;
+        let vy = 0.;
+        let score = 0;
+        Paddle::new(x, y, width, height, vy, score)
+    }
+
+    fn create_right_paddle(&self) -> Paddle {
+        let width = 10.;
+        let height = 60.;
+        let x = self.screen_width - width;;
+        let y = (self.screen_height - height) / 2.;
+        let vy = 0.;
+        let score = 0;
+        Paddle::new(x, y, width, height, vy, score)
+    }
+
     pub fn build(&self) -> Game {
-        Game::new(self.create_ui(), self.fps, self.create_ball())
+        Game::new(self.create_ui(), 
+                  self.fps, 
+                  self.create_ball(),
+                  self.create_left_paddle(),
+                  self.create_right_paddle())
     }
 }
 
