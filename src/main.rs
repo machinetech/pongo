@@ -71,18 +71,20 @@ pub struct Paddle {
     pub y: f32,         // y pixel co-ordinate of top left corner
     pub width: f32,     // pixels
     pub height: f32,    // pixels
+    pub speed: f32,     // pixels per second
     pub vy: f32,        // pixels per second
     pub score: u32
 }
 
 impl Paddle {
-    pub fn new(x: f32, y: f32, width: f32, height: f32, vy: f32, 
+    pub fn new(x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
                score: u32) -> Paddle {
         Paddle {
             x: x,
             y: y,
             width: width,
             height: height,
+            speed: speed,
             vy: vy,
             score: score}
     }
@@ -127,13 +129,13 @@ impl Game {
 
     /// Called once per frame. 
     fn update(&mut self, dt_sec: f32) {
-        self.handle_input();
+        self.handle_input(dt_sec);
         self.update_ball_position(dt_sec);
         self.check_for_ball_and_wall_collisions();
         self.redraw()
     }
 
-    fn handle_input(&mut self) {
+    fn handle_input(&mut self, dt_sec: f32) {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
@@ -144,6 +146,18 @@ impl Game {
                         Option::Some(Keycode::Escape) => {
                             self.running = false;
                         },
+                        Option::Some(Keycode::Up) => {
+                            let lpaddle = &mut self.lpaddle;
+                            lpaddle.y -= lpaddle.speed * dt_sec;
+                            if lpaddle.y < 0. { lpaddle.y = 0.; }
+                        },
+                        Option::Some(Keycode::Down) => {
+                            let lpaddle = &mut self.lpaddle;
+                            lpaddle.y += lpaddle.speed * dt_sec;
+                            if lpaddle.y + lpaddle.height > self.ui.height {
+                                lpaddle.y = self.ui.height - lpaddle.height; 
+                            }
+                        },
                         _ => {}
                     },
                     _ => {}
@@ -152,7 +166,7 @@ impl Game {
             None => {}
         }
     }
-    
+
     fn update_ball_position(&mut self, dt_sec: f32) {
         let ball = &mut self.ball;
         ball.x += ball.vx * dt_sec;
@@ -311,7 +325,7 @@ impl GameBuilder {
         let y = (self.screen_height - height) / 2.;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, vy, score)
+        Paddle::new(x, y, width, height, self.paddle_speed, vy, score)
     }
 
     fn create_right_paddle(&self) -> Paddle {
@@ -321,7 +335,7 @@ impl GameBuilder {
         let y = (self.screen_height - height) / 2.;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, vy, score)
+        Paddle::new(x, y, width, height, self.paddle_speed, vy, score)
     }
 
     pub fn build(&self) -> Game {
@@ -338,7 +352,7 @@ fn main() {
         .with_dimensions(480., 320.)
         .with_fps(40)
         .with_ball_speed_per_sec(320.)
-        .with_paddle_speed_per_sec(320.)
+        .with_paddle_speed_per_sec(800.)
         .build();
     game.start();
 }
