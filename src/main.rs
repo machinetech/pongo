@@ -18,26 +18,18 @@ use std::f32;
 use std::path::Path;
 use std::thread;
 
-pub const FPS: u32 = 40;
-pub const SCREEN_WIDTH: f32 = 600.;
-pub const SCREEN_HEIGHT: f32 = 300.;
-
 pub struct Ui {
+    width: f32,
+    height: f32,
     sdl_ctx: Sdl,
     renderer: Renderer<'static>
 }
 
 impl Ui {
-    pub fn new() -> Ui {
-        let sdl_ctx = sdl2::init().unwrap();
-        let video_subsystem = sdl_ctx.video().unwrap();
-        let window = video_subsystem.window("pong", 
-                SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
-                .position_centered()
-                .build()
-                .unwrap();
-        let renderer = window.renderer().build().unwrap();
+    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
         Ui {
+            width: width,
+            height: height,
             sdl_ctx: sdl_ctx,
             renderer: renderer
         }  
@@ -60,31 +52,8 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new() -> Ball {
-        let width = 10.;
-        let height = 10.;
-        
-        // Place ball at center of screen. 
-        let x = (SCREEN_WIDTH - width) / 2.;
-        let y = (SCREEN_HEIGHT - height) / 2.;
-
-        // Able to travel height of screen in 1 second
-        let speed = SCREEN_HEIGHT;
-        let mut rng = rand::thread_rng();
-
-        // Launch at an angle less than or equal to 45 degrees.
-        let angle = Range::new(0., f32::consts::PI/4.).ind_sample(&mut rng);
-        let dir = [-1., 1.];
-
-        // Use the sine of the angle to determine the vertical speed. Then, 
-        // choose a direction (up or down) to select a vertical velocity.
-        let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-        let vy = angle.sin() * speed * up_or_down; 
-        let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-
-        // Use Pythagoras to determine the horizontal speed. Then, choose a
-        // direction (left or right) to select a horizontal velocity.
-        let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
+    pub fn new(x: f32, y: f32, width: f32, height: f32,
+               speed: f32, vx: f32, vy: f32) -> Ball {
         Ball {
             x: x,
             y: y,
@@ -97,8 +66,18 @@ impl Ball {
     }
 }
 
+pub struct Paddle {
+    pub x: f32,         // x pixel co-ordinate of top left corner
+    pub y: f32,         // y pixel co-ordinate of top left corner
+    pub width: f32,     // pixels
+    pub height: f32,    // pixels
+    pub vy: f32,        // pixels per second
+    pub score: u32
+}
+
 pub struct Game {
     ui: Ui,
+    fps: u32,
     ball: Ball,
     running: bool
 }
@@ -106,10 +85,11 @@ pub struct Game {
 impl Game {
 
     /// Create initial game state. 
-    pub fn new() -> Game { 
+    pub fn new(ui: Ui, fps: u32, ball: Ball) -> Game { 
         Game {
-            ui: Ui::new(),
-            ball: Ball::new(),
+            ui: ui,
+            fps: fps,
+            ball: ball,
             running: false,
         }
     }
@@ -169,55 +149,128 @@ impl Game {
     }
     
     fn check_for_ball_and_wall_collisions(&mut self) {
-        self.check_for_ball_and_top_wall_collision();
-        self.check_for_ball_and_right_wall_collision();
-        self.check_for_ball_and_bottom_wall_collision();
-        self.check_for_ball_and_left_wall_collision();
-    }
-
-    fn check_for_ball_and_top_wall_collision(&mut self) {
         let ball = &mut self.ball;
-        if ball.y <= 0. && ball.vy < -0. {
-            ball.y = 0.;
-            ball.vy = -ball.vy; 
-        }
-    }
 
-    fn check_for_ball_and_right_wall_collision(&mut self) {
-        let ball = &mut self.ball; 
-        if ball.x + ball.width >= SCREEN_WIDTH && ball.vx > 0. {
-            ball.x = SCREEN_WIDTH - ball.width;
-            ball.vx = -ball.vx;
-        } 
-    }
-
-    fn check_for_ball_and_bottom_wall_collision(&mut self) {
-        let ball = &mut self.ball;
-        if ball.y + ball.height >= SCREEN_HEIGHT && ball.vy > 0. {
-            ball.y = SCREEN_HEIGHT - ball.height;
-            ball.vy = -ball.vy;
-        } 
-    }
-
-    fn check_for_ball_and_left_wall_collision(&mut self) {
-        let ball = &mut self.ball; 
+        // Left or right wall.
         if ball.x <= 0. && ball.vx < -0. {
             ball.x = 0.;
             ball.vx = -ball.vx; 
+        } else if ball.x + ball.width >= self.ui.width && ball.vx > 0. {
+            ball.x = self.ui.width - ball.width;
+            ball.vx = -ball.vx;
         } 
+
+        // Top or bottom wall.
+        if ball.y <= 0. && ball.vy < -0. {
+            ball.y = 0.;
+            ball.vy = -ball.vy; 
+        } else if ball.y + ball.height >= self.ui.height && ball.vy > 0. {
+            ball.y = self.ui.height - ball.height;
+            ball.vy = -ball.vy;
+        }
     }
 
     // Ensure we run no faster than the desired fps by introducing
     // a delay if necessary.
     fn cap_fps(&self, took_ms: u64) {
-        let max_ms = 1000 / FPS as u64;
+        let max_ms = 1000 / self.fps as u64;
         if max_ms > took_ms {
             thread::sleep_ms((max_ms - took_ms) as u32);
         }
     }
 }
 
+struct GameBuilder {
+    screen_width: f32,
+    screen_height: f32,
+    fps: u32,
+    ball_speed: f32,
+    paddle_speed: f32
+}
+
+impl GameBuilder {
+
+    pub fn new() -> GameBuilder {
+        GameBuilder {
+            screen_width: 480.,
+            screen_height: 320.,
+            fps: 40,
+            ball_speed: 320.,
+            paddle_speed: 640.
+        }
+    }
+
+    pub fn with_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
+        self.screen_width = width;
+        self.screen_height = height;
+        self
+    }
+
+    pub fn with_fps(mut self, fps: u32) -> GameBuilder {
+        self.fps = fps; 
+        self
+    }
+    
+    pub fn with_ball_speed_per_sec(mut self, ball_speed: f32) -> GameBuilder {
+        self.ball_speed = ball_speed; 
+        self
+    }
+
+    pub fn with_paddle_speed_per_sec(mut self, paddle_speed: f32) -> GameBuilder {
+        self.paddle_speed = paddle_speed; 
+        self
+    }
+
+    fn create_ui(&self) -> Ui {
+        let sdl_ctx = sdl2::init().unwrap();
+        let video_subsystem = sdl_ctx.video().unwrap();
+        let window = video_subsystem.window("pong", 
+                self.screen_width as u32, self.screen_height as u32)
+                .position_centered()
+                .build()
+                .unwrap();
+        let renderer = window.renderer().build().unwrap();
+        Ui::new(self.screen_width, self.screen_height, sdl_ctx, renderer)
+    }
+
+    fn create_ball(&self) -> Ball {
+        let width = 10.;
+        let height = 10.;
+        
+        // Place ball at center of screen. 
+        let x = (self.screen_width - width) / 2.;
+        let y = (self.screen_height - height) / 2.;
+
+        let speed = self.ball_speed;
+        let mut rng = rand::thread_rng();
+
+        // Launch at an angle less than or equal to 45 degrees.
+        let angle = Range::new(0., f32::consts::PI/4.).ind_sample(&mut rng);
+        let dir = [-1., 1.];
+
+        // Use the sine of the angle to determine the vertical speed. Then, 
+        // choose a direction (up or down) to select a vertical velocity.
+        let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+        let vy = angle.sin() * speed * up_or_down; 
+        let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+
+        // Use Pythagoras to determine the horizontal speed. Then, choose a
+        // direction (left or right) to select a horizontal velocity.
+        let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
+        Ball::new(x, y, width, height, speed, vx, vy)
+    }    
+
+    pub fn build(&self) -> Game {
+        Game::new(self.create_ui(), self.fps, self.create_ball())
+    }
+}
+
 fn main() {
-    let mut game = Game::new(); 
+    let mut game = GameBuilder::new()
+        .with_dimensions(480., 320.)
+        .with_fps(40)
+        .with_ball_speed_per_sec(320.)
+        .with_paddle_speed_per_sec(320.)
+        .build();
     game.start();
 }
