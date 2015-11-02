@@ -26,7 +26,8 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, renderer: Renderer<'static>) -> Self {
+    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, 
+               renderer: Renderer<'static>) -> Self {
         Ui {
             width: width,
             height: height,
@@ -44,21 +45,19 @@ impl Ui {
 pub struct Ball {
     pub x: f32,         // x pixel co-ordinate of top left corner
     pub y: f32,         // y pixel co-ordinate of top left corner
-    pub width: f32,     // pixels
-    pub height: f32,    // pixels
+    pub diameter: f32,    
     pub speed: f32,     // pixels per second 
     pub vx: f32,        // pixels per second
     pub vy: f32         // pixels per second
 }
 
 impl Ball {
-    pub fn new(x: f32, y: f32, width: f32, height: f32, 
+    pub fn new(x: f32, y: f32, diameter: f32, 
                speed: f32, vx: f32, vy: f32) -> Self {
         Ball {
             x: x,
             y: y,
-            width: width,
-            height: height,
+            diameter: diameter,
             speed: speed,
             vx: vx,
             vy: vy
@@ -69,8 +68,8 @@ impl Ball {
 pub struct Paddle {
     pub x: f32,         // x pixel co-ordinate of top left corner
     pub y: f32,         // y pixel co-ordinate of top left corner
-    pub width: f32,     // pixels
-    pub height: f32,    // pixels
+    pub width: f32,     
+    pub height: f32,    
     pub speed: f32,     // pixels per second
     pub vy: f32,        // pixels per second
     pub score: u32
@@ -127,15 +126,14 @@ impl Game {
         } 
     }
 
-    /// Called once per frame. 
+    // Called once per frame. 
     fn update(&mut self, dt_sec: f32) {
         self.handle_input(dt_sec);
         self.update_ball_position(dt_sec);
-        self.check_for_ball_and_wall_collisions();
-        self.check_for_ball_and_lpaddle_collision();
         self.redraw()
     }
 
+    // Handle user input including moving the left paddle. 
     fn handle_input(&mut self, dt_sec: f32) {
         match self.ui.poll_event() {
             Some(event) => {
@@ -168,10 +166,23 @@ impl Game {
         }
     }
 
+    // Update the position of the ball and deal with wall and paddle collisions.
     fn update_ball_position(&mut self, dt_sec: f32) {
+        let ui = &mut self.ui;
         let ball = &mut self.ball;
-        ball.x += ball.vx * dt_sec;
-        ball.y += ball.vy * dt_sec;
+        
+        let new_ball_x = ball.x + ball.vx * dt_sec;
+        let mut new_ball_y = ball.y + ball.vy * dt_sec;
+
+        if new_ball_y < 0. {
+            new_ball_y = -new_ball_y;
+            ball.vy = -ball.vy;
+        } else if (new_ball_y + ball.diameter > (ui.height - 1.)) {
+            new_ball_y -= 2. * ((new_ball_y + ball.diameter) - (ui.height - 1.));
+        }
+
+        ball.x = new_ball_x;
+        ball.y = new_ball_y;
     }
     
     fn check_for_ball_and_wall_collisions(&mut self) {
@@ -182,8 +193,8 @@ impl Game {
         if ball.x <= 0. && ball.vx < -0. {
             ball.x = 0.;
             ball.vx = -ball.vx; 
-        } else if ball.x + ball.width >= ui.width && ball.vx > 0. {
-            ball.x = ui.width - ball.width;
+        } else if ball.x + ball.diameter >= ui.width && ball.vx > 0. {
+            ball.x = ui.width - ball.diameter;
             ball.vx = -ball.vx;
         } 
 
@@ -191,8 +202,8 @@ impl Game {
         if ball.y <= 0. && ball.vy < -0. {
             ball.y = 0.;
             ball.vy = -ball.vy; 
-        } else if ball.y + ball.height >= ui.height && ball.vy > 0. {
-            ball.y = ui.height - ball.height;
+        } else if ball.y + ball.diameter >= ui.height && ball.vy > 0. {
+            ball.y = ui.height - ball.diameter;
             ball.vy = -ball.vy;
         }
     }
@@ -201,29 +212,37 @@ impl Game {
         let ball = &mut self.ball;
         let lpaddle = &mut self.lpaddle;
 
-        if ball.vx < 0. && ball.x <= lpaddle.width && 
-            ball.y >= lpaddle.y && ball.y <= lpaddle.y + lpaddle.height {
+        //if ball.vx < 0. && ball.x < lpaddle.width && ball.x >= 0 {
+        //    
+        //    let x_intersect = lpaddle.width;
+        //    let y_intersect = ball.y - (ball.x - lpaddle.width) * 
 
-            // Calculate the ball's position relative to the center of the paddle. 
-            let hit_loc = ball.y - lpaddle.y;
-            
-            // Calculate an angle multiplier as a percentage of half the paddle's height. 
-            let angle_multiplier = (hit_loc / (lpaddle.height / 2.)).abs();
+        //    // Calculate the ball's position relative to the center of the paddle. 
+        //    let relative_hit_loc = lpaddle.y + (lpaddle.height/2.) - (ball.y + ball.height/2.);
+        //    
+        //    let normalized_hit_loc = relative_hit_loc / (lpaddle.height/2.);
+        //    
+        //    // Calculate an angle multiplier as a percentage of half the paddle's height. 
+        //    let angle_multiplier = normalized_hit_loc / (lpaddle.height/2.);
 
-            // Calculate the angle the ball should return at.
-            let angle = (f32::consts::PI / 6.) * angle_multiplier;
+        //    // Set the maximum bounce angle to 75 degrees.
+        //    let max_angle = f32::consts::PI * 5./12.;
 
-            // Calculate new vertical and horizontal velocities.
-            let vx = angle.cos() * ball.speed;
-            let vy = angle.sin() * ball.speed * if hit_loc > 0. {1.} else {-1.};
-            
-            ball.x = ball.width;
-            ball.vx = vx;
-            ball.vy = vy;
-        } 
+        //    // Calculate the angle the ball should return at.
+        //    let angle = max_angle * angle_multiplier;
+
+        //    // Calculate new vertical and horizontal velocities.
+        //    let vx = angle.cos() * ball.speed;
+        //    let vy = angle.sin() * -ball.speed;
+        //   
+        //    ball.x = lpaddle.width;
+        //    ball.vx = vx;
+        //    ball.vy = vy;
+        //} 
     }
 
     fn redraw(&mut self) {
+
         // Clear the screen.
         self.ui.renderer.clear();
         
@@ -231,8 +250,8 @@ impl Game {
         let ball = &mut self.ball;
         let ball_rect = Rect::new_unwrap(ball.x as i32, 
                                     ball.y as i32, 
-                                    ball.width as u32,
-                                    ball.height as u32);
+                                    ball.diameter as u32,
+                                    ball.diameter as u32);
         self.ui.renderer.fill_rect(ball_rect);
 
         // Draw the left paddle.
@@ -271,7 +290,12 @@ struct GameBuilder {
     screen_height: f32,
     fps: u32,
     ball_speed: f32,
-    paddle_speed: f32
+    ball_diameter: f32,
+    paddle_offset: f32,
+    paddle_width: f32,
+    paddle_height: f32,
+    paddle_speed: f32,
+    max_bounce_angle: f32
 }
 
 impl GameBuilder {
@@ -282,7 +306,12 @@ impl GameBuilder {
             screen_height: 320.,
             fps: 40,
             ball_speed: 320.,
-            paddle_speed: 640.
+            ball_diameter: 10.,
+            paddle_offset: 4.,
+            paddle_width: 10.,
+            paddle_height: 80.,
+            paddle_speed: 640.,
+            max_bounce_angle: f32::consts::PI/12.
         }
     }
 
@@ -302,8 +331,33 @@ impl GameBuilder {
         self
     }
 
+    pub fn with_ball_diameter(mut self, ball_diameter: f32) -> Self {
+        self.ball_diameter = ball_diameter;
+        self
+    }
+
+    pub fn with_paddle_offset(mut self, paddle_offset: f32) -> Self {
+        self.paddle_offset = paddle_offset;
+        self
+    }
+
+    pub fn with_paddle_width(mut self, paddle_width: f32) -> Self {
+        self.paddle_width = paddle_width;
+        self
+    }
+    
+    pub fn with_paddle_height(mut self, paddle_height: f32) -> Self {
+        self.paddle_height = paddle_height;
+        self
+    }
+
     pub fn with_paddle_speed_per_sec(mut self, paddle_speed: f32) -> Self {
         self.paddle_speed = paddle_speed; 
+        self
+    }
+
+    pub fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> Self {
+        self.max_bounce_angle = max_bounce_angle;
         self
     }
 
@@ -320,18 +374,17 @@ impl GameBuilder {
     }
 
     fn create_ball(&self) -> Ball {
-        let width = 10.;
-        let height = 10.;
         
         // Place ball at center of screen. 
-        let x = (self.screen_width - width) / 2.;
-        let y = (self.screen_height - height) / 2.;
+        let diameter = self.ball_diameter;
+        let x = (self.screen_width - diameter)/2.;
+        let y = (self.screen_height - diameter)/2.;
 
         let speed = self.ball_speed;
         let mut rng = rand::thread_rng();
 
         // Launch at an angle less than or equal to 45 degrees.
-        let angle = Range::new(0., f32::consts::PI/4.).ind_sample(&mut rng);
+        let angle = Range::new(0., self.max_bounce_angle).ind_sample(&mut rng);
         let dir = [-1., 1.];
 
         // Use the sine of the angle to determine the vertical speed. Then, 
@@ -339,31 +392,33 @@ impl GameBuilder {
         let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
         let vy = angle.sin() * speed * up_or_down; 
         let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-
+        
         // Use Pythagoras to determine the horizontal speed. Then, choose a
         // direction (left or right) to select a horizontal velocity.
         let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
-        Ball::new(x, y, width, height, speed, vx, vy)
+        Ball::new(x, y, diameter, speed, vx, vy)
     }    
 
     fn create_left_paddle(&self) -> Paddle {
-        let width = 10.;
-        let height = 60.;
-        let x = 0.;
-        let y = (self.screen_height - height) / 2.;
+        let width = self.paddle_width;
+        let height = self.paddle_height;
+        let x = self.paddle_offset;
+        let y = (self.screen_height - height)/2.;
+        let speed = self.paddle_speed;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, self.paddle_speed, vy, score)
+        Paddle::new(x, y, width, height, speed, vy, score)
     }
 
     fn create_right_paddle(&self) -> Paddle {
-        let width = 10.;
-        let height = 60.;
-        let x = self.screen_width - width;;
-        let y = (self.screen_height - height) / 2.;
+        let width = self.paddle_width;
+        let height = self.paddle_height;
+        let x = self.screen_width - (self.paddle_offset + width);
+        let y = (self.screen_height - height)/2.;
+        let speed = self.paddle_speed;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, self.paddle_speed, vy, score)
+        Paddle::new(x, y, width, height, speed, vy, score)
     }
 
     pub fn build(&self) -> Game {
@@ -377,10 +432,15 @@ impl GameBuilder {
 
 fn main() {
     let mut game = GameBuilder::new()
-        .with_dimensions(480., 320.)
+        .with_dimensions(800., 600.)
         .with_fps(40)
-        .with_ball_speed_per_sec(320.)
+        .with_ball_speed_per_sec(400.)
+        .with_ball_diameter(10.)
+        .with_paddle_offset(4.)
+        .with_paddle_width(10.)
+        .with_paddle_height(80.)
         .with_paddle_speed_per_sec(1000.)
+        .with_max_bounce_angle_rads(f32::consts::PI/12.)
         .build();
     game.start();
 }
