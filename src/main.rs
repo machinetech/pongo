@@ -26,7 +26,7 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
+    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, renderer: Renderer<'static>) -> Self {
         Ui {
             width: width,
             height: height,
@@ -53,7 +53,7 @@ pub struct Ball {
 
 impl Ball {
     pub fn new(x: f32, y: f32, width: f32, height: f32, 
-               speed: f32, vx: f32, vy: f32) -> Ball {
+               speed: f32, vx: f32, vy: f32) -> Self {
         Ball {
             x: x,
             y: y,
@@ -78,7 +78,7 @@ pub struct Paddle {
 
 impl Paddle {
     pub fn new(x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
-               score: u32) -> Paddle {
+               score: u32) -> Self {
         Paddle {
             x: x,
             y: y,
@@ -103,7 +103,7 @@ impl Game {
 
     /// Create initial game state. 
     pub fn new(ui: Ui, fps: u32, ball: Ball, lpaddle: Paddle, 
-               rpaddle: Paddle) -> Game { 
+               rpaddle: Paddle) -> Self { 
         Game {
             ui: ui,
             fps: fps,
@@ -132,6 +132,7 @@ impl Game {
         self.handle_input(dt_sec);
         self.update_ball_position(dt_sec);
         self.check_for_ball_and_wall_collisions();
+        self.check_for_ball_and_lpaddle_collision();
         self.redraw()
     }
 
@@ -175,13 +176,14 @@ impl Game {
     
     fn check_for_ball_and_wall_collisions(&mut self) {
         let ball = &mut self.ball;
+        let ui = &mut self.ui;
 
         // Left or right wall.
         if ball.x <= 0. && ball.vx < -0. {
             ball.x = 0.;
             ball.vx = -ball.vx; 
-        } else if ball.x + ball.width >= self.ui.width && ball.vx > 0. {
-            ball.x = self.ui.width - ball.width;
+        } else if ball.x + ball.width >= ui.width && ball.vx > 0. {
+            ball.x = ui.width - ball.width;
             ball.vx = -ball.vx;
         } 
 
@@ -189,10 +191,36 @@ impl Game {
         if ball.y <= 0. && ball.vy < -0. {
             ball.y = 0.;
             ball.vy = -ball.vy; 
-        } else if ball.y + ball.height >= self.ui.height && ball.vy > 0. {
-            ball.y = self.ui.height - ball.height;
+        } else if ball.y + ball.height >= ui.height && ball.vy > 0. {
+            ball.y = ui.height - ball.height;
             ball.vy = -ball.vy;
         }
+    }
+
+    fn check_for_ball_and_lpaddle_collision(&mut self) {
+        let ball = &mut self.ball;
+        let lpaddle = &mut self.lpaddle;
+
+        if ball.vx < 0. && ball.x <= lpaddle.width && 
+            ball.y >= lpaddle.y && ball.y <= lpaddle.y + lpaddle.height {
+
+            // Calculate the ball's position relative to the center of the paddle. 
+            let hit_loc = ball.y - lpaddle.y;
+            
+            // Calculate an angle multiplier as a percentage of half the paddle's height. 
+            let angle_multiplier = (hit_loc / (lpaddle.height / 2.)).abs();
+
+            // Calculate the angle the ball should return at.
+            let angle = (f32::consts::PI / 6.) * angle_multiplier;
+
+            // Calculate new vertical and horizontal velocities.
+            let vx = angle.cos() * ball.speed;
+            let vy = angle.sin() * ball.speed * if hit_loc > 0. {1.} else {-1.};
+            
+            ball.x = ball.width;
+            ball.vx = vx;
+            ball.vy = vy;
+        } 
     }
 
     fn redraw(&mut self) {
@@ -248,7 +276,7 @@ struct GameBuilder {
 
 impl GameBuilder {
 
-    pub fn new() -> GameBuilder {
+    pub fn new() -> Self {
         GameBuilder {
             screen_width: 480.,
             screen_height: 320.,
@@ -258,23 +286,23 @@ impl GameBuilder {
         }
     }
 
-    pub fn with_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
+    pub fn with_dimensions(mut self, width: f32, height: f32) -> Self {
         self.screen_width = width;
         self.screen_height = height;
         self
     }
 
-    pub fn with_fps(mut self, fps: u32) -> GameBuilder {
+    pub fn with_fps(mut self, fps: u32) -> Self {
         self.fps = fps; 
         self
     }
     
-    pub fn with_ball_speed_per_sec(mut self, ball_speed: f32) -> GameBuilder {
+    pub fn with_ball_speed_per_sec(mut self, ball_speed: f32) -> Self {
         self.ball_speed = ball_speed; 
         self
     }
 
-    pub fn with_paddle_speed_per_sec(mut self, paddle_speed: f32) -> GameBuilder {
+    pub fn with_paddle_speed_per_sec(mut self, paddle_speed: f32) -> Self {
         self.paddle_speed = paddle_speed; 
         self
     }
@@ -352,7 +380,7 @@ fn main() {
         .with_dimensions(480., 320.)
         .with_fps(40)
         .with_ball_speed_per_sec(320.)
-        .with_paddle_speed_per_sec(800.)
+        .with_paddle_speed_per_sec(1000.)
         .build();
     game.start();
 }
