@@ -1,22 +1,25 @@
 extern crate clock_ticks;
 extern crate rand;
 extern crate sdl2;
+extern crate sdl2_gfx;
 
 use rand::distributions::{IndependentSample, Range};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
+use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
 use sdl2::Sdl;
 use sdl2::TimerSubsystem;
 use sdl2::VideoSubsystem;
- 
 use std::default::Default;
 use std::f32;
 use std::path::Path;
 use std::thread;
+
+use sdl2_gfx::primitives::DrawRenderer;
 
 pub struct Ui {
     width: f32,
@@ -242,29 +245,32 @@ impl Game {
     }
 
     fn redraw(&mut self) {
+        
+        // Set the default drawing color (also the color of the background).
+        self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
 
         // Clear the screen.
         self.ui.renderer.clear();
-        
+
         // Draw the ball.
         let ball = &mut self.ball;
-        let ball_rect = Rect::new_unwrap(ball.x as i32, 
-                                    ball.y as i32, 
-                                    ball.diameter as u32,
-                                    ball.diameter as u32);
-        self.ui.renderer.fill_rect(ball_rect);
+        self.ui.renderer.filled_circle(ball.x as i16, 
+                                       ball.y as i16, 
+                                       (ball.diameter/2.) as i16, 
+                                       Color::RGB(0xff, 0xcb, 0x18));
 
         // Draw the left paddle.
         let lpaddle = &mut self.lpaddle;
+        self.ui.renderer.set_draw_color(Color::RGB(0x73, 0xb6, 0x06b));
         let lpaddle_rect = Rect::new_unwrap(lpaddle.x as i32, 
                                     lpaddle.y as i32, 
                                     lpaddle.width as u32,
                                     lpaddle.height as u32);
         self.ui.renderer.fill_rect(lpaddle_rect);
 
-
         // Draw the right paddle.
         let rpaddle = &mut self.rpaddle;
+        self.ui.renderer.set_draw_color(Color::RGB(0x29, 0xa2, 0x0c6));
         let rpaddle_rect = Rect::new_unwrap(rpaddle.x as i32, 
                                     rpaddle.y as i32, 
                                     rpaddle.width as u32,
@@ -377,8 +383,8 @@ impl GameBuilder {
         
         // Place ball at center of screen. 
         let diameter = self.ball_diameter;
-        let x = (self.screen_width - diameter)/2.;
-        let y = (self.screen_height - diameter)/2.;
+        let x = self.screen_width/2.;
+        let y = self.screen_height/2.;
 
         let speed = self.ball_speed;
         let mut rng = rand::thread_rng();
@@ -431,13 +437,14 @@ impl GameBuilder {
 }
 
 fn main() {
+    // todo make colors configurable
     let mut game = GameBuilder::new()
         .with_dimensions(800., 600.)
         .with_fps(40)
         .with_ball_speed_per_sec(400.)
-        .with_ball_diameter(10.)
+        .with_ball_diameter(12.)
         .with_paddle_offset(4.)
-        .with_paddle_width(10.)
+        .with_paddle_width(20.)
         .with_paddle_height(80.)
         .with_paddle_speed_per_sec(1000.)
         .with_max_bounce_angle_rads(f32::consts::PI/12.)
