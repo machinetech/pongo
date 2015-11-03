@@ -22,20 +22,15 @@ use std::thread;
 use sdl2_gfx::primitives::DrawRenderer;
 
 pub struct Ui {
-    width: f32,
-    height: f32,
     sdl_ctx: Sdl,
     renderer: Renderer<'static>
 }
 
 impl Ui {
-    pub fn new(width: f32, height: f32, sdl_ctx: Sdl, 
-               renderer: Renderer<'static>) -> Self {
-        Ui {
-            width: width,
-            height: height,
-            sdl_ctx: sdl_ctx,
-            renderer: renderer
+    pub fn new(sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
+        Ui { 
+            sdl_ctx: sdl_ctx, 
+            renderer: renderer 
         }  
     } 
 
@@ -45,7 +40,24 @@ impl Ui {
     }
 }
 
+pub struct Arena {
+    color: Color,
+    width: f32,
+    height: f32
+}
+
+impl Arena {
+    pub fn new(color: Color, width: f32, height: f32) -> Arena {
+        Arena {
+            color: color,
+            width: width,
+            height: height
+        }
+    }
+}
+
 pub struct Ball {
+    pub color: Color,
     pub x: f32,         // x pixel co-ordinate of top left corner
     pub y: f32,         // y pixel co-ordinate of top left corner
     pub diameter: f32,    
@@ -55,20 +67,22 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new(x: f32, y: f32, diameter: f32, 
-               speed: f32, vx: f32, vy: f32) -> Self {
-        Ball {
-            x: x,
-            y: y,
-            diameter: diameter,
-            speed: speed,
-            vx: vx,
-            vy: vy
+    pub fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, vx: f32, 
+               vy: f32) -> Ball {
+        Ball { 
+            color: color, 
+            x: x, 
+            y: y, 
+            diameter: diameter, 
+            speed: speed, 
+            vx: vx, 
+            vy: vy 
         }
     }
 }
 
 pub struct Paddle {
+    pub color: Color,
     pub x: f32,         // x pixel co-ordinate of top left corner
     pub y: f32,         // y pixel co-ordinate of top left corner
     pub width: f32,     
@@ -79,22 +93,25 @@ pub struct Paddle {
 }
 
 impl Paddle {
-    pub fn new(x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
-               score: u32) -> Self {
-        Paddle {
-            x: x,
-            y: y,
-            width: width,
-            height: height,
-            speed: speed,
-            vy: vy,
-            score: score}
+    pub fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
+               score: u32) -> Paddle {
+        Paddle { 
+            color: color,
+            x: x, 
+            y: y, 
+            width: width, 
+            height: height, 
+            speed: speed, 
+            vy: vy, 
+            score: score 
+        }
     }
 }
 
 pub struct Game {
     ui: Ui,
     fps: u32,
+    arena: Arena,
     ball: Ball,
     lpaddle: Paddle,
     rpaddle: Paddle,
@@ -104,15 +121,16 @@ pub struct Game {
 impl Game {
 
     /// Create initial game state. 
-    pub fn new(ui: Ui, fps: u32, ball: Ball, lpaddle: Paddle, 
-               rpaddle: Paddle) -> Self { 
-        Game {
-            ui: ui,
-            fps: fps,
-            ball: ball,
-            lpaddle: lpaddle,
-            rpaddle: rpaddle,
-            running: false,
+    pub fn new(ui: Ui, fps: u32, arena: Arena, ball: Ball, lpaddle: Paddle, 
+               rpaddle: Paddle) -> Game { 
+        Game { 
+            ui: ui, 
+            fps: fps, 
+            arena: arena,
+            ball: ball, 
+            lpaddle: lpaddle, 
+            rpaddle: rpaddle, 
+            running: false 
         }
     }
 
@@ -149,15 +167,17 @@ impl Game {
                             self.running = false;
                         },
                         Option::Some(Keycode::Up) => {
+                            let arena = &mut self.arena;
                             let lpaddle = &mut self.lpaddle;
                             lpaddle.y -= lpaddle.speed * dt_sec;
                             if lpaddle.y < 0. { lpaddle.y = 0.; }
                         },
                         Option::Some(Keycode::Down) => {
+                            let arena = &mut self.arena;
                             let lpaddle = &mut self.lpaddle;
                             lpaddle.y += lpaddle.speed * dt_sec;
-                            if lpaddle.y + lpaddle.height > self.ui.height {
-                                lpaddle.y = self.ui.height - lpaddle.height; 
+                            if lpaddle.y + lpaddle.height > arena.height {
+                                lpaddle.y = arena.height - lpaddle.height; 
                             }
                         },
                         _ => {}
@@ -171,7 +191,7 @@ impl Game {
 
     // Update the position of the ball and deal with wall and paddle collisions.
     fn update_ball_position(&mut self, dt_sec: f32) {
-        let ui = &mut self.ui;
+        let arena = &mut self.arena;
         let ball = &mut self.ball;
         
         let new_ball_x = ball.x + ball.vx * dt_sec;
@@ -180,8 +200,8 @@ impl Game {
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
-        } else if (new_ball_y + ball.diameter > (ui.height - 1.)) {
-            new_ball_y -= 2. * ((new_ball_y + ball.diameter) - (ui.height - 1.));
+        } else if (new_ball_y + ball.diameter > (arena.height - 1.)) {
+            new_ball_y -= 2. * ((new_ball_y + ball.diameter) - (arena.height - 1.));
         }
 
         ball.x = new_ball_x;
@@ -189,15 +209,15 @@ impl Game {
     }
     
     fn check_for_ball_and_wall_collisions(&mut self) {
+        let arena = &mut self.arena;
         let ball = &mut self.ball;
-        let ui = &mut self.ui;
 
         // Left or right wall.
         if ball.x <= 0. && ball.vx < -0. {
             ball.x = 0.;
             ball.vx = -ball.vx; 
-        } else if ball.x + ball.diameter >= ui.width && ball.vx > 0. {
-            ball.x = ui.width - ball.diameter;
+        } else if ball.x + ball.diameter >= arena.width && ball.vx > 0. {
+            ball.x = arena.width - ball.diameter;
             ball.vx = -ball.vx;
         } 
 
@@ -205,8 +225,8 @@ impl Game {
         if ball.y <= 0. && ball.vy < -0. {
             ball.y = 0.;
             ball.vy = -ball.vy; 
-        } else if ball.y + ball.diameter >= ui.height && ball.vy > 0. {
-            ball.y = ui.height - ball.diameter;
+        } else if ball.y + ball.diameter >= arena.height && ball.vy > 0. {
+            ball.y = arena.height - ball.diameter;
             ball.vy = -ball.vy;
         }
     }
@@ -247,7 +267,7 @@ impl Game {
     fn redraw(&mut self) {
         
         // Set the default drawing color (also the color of the background).
-        self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        self.ui.renderer.set_draw_color(self.arena.color);
 
         // Clear the screen.
         self.ui.renderer.clear();
@@ -257,11 +277,11 @@ impl Game {
         self.ui.renderer.filled_circle(ball.x as i16, 
                                        ball.y as i16, 
                                        (ball.diameter/2.) as i16, 
-                                       Color::RGB(0xff, 0xcb, 0x18));
+                                       ball.color);
 
         // Draw the left paddle.
         let lpaddle = &mut self.lpaddle;
-        self.ui.renderer.set_draw_color(Color::RGB(0x73, 0xb6, 0x06b));
+        self.ui.renderer.set_draw_color(lpaddle.color);
         let lpaddle_rect = Rect::new_unwrap(lpaddle.x as i32, 
                                     lpaddle.y as i32, 
                                     lpaddle.width as u32,
@@ -270,7 +290,7 @@ impl Game {
 
         // Draw the right paddle.
         let rpaddle = &mut self.rpaddle;
-        self.ui.renderer.set_draw_color(Color::RGB(0x29, 0xa2, 0x0c6));
+        self.ui.renderer.set_draw_color(rpaddle.color);
         let rpaddle_rect = Rect::new_unwrap(rpaddle.x as i32, 
                                     rpaddle.y as i32, 
                                     rpaddle.width as u32,
@@ -292,11 +312,15 @@ impl Game {
 }
 
 struct GameBuilder {
-    screen_width: f32,
-    screen_height: f32,
+    arena_color: Color,
+    arena_width: f32,
+    arena_height: f32,
     fps: u32,
+    ball_color: Color,
     ball_speed: f32,
     ball_diameter: f32,
+    lpaddle_color: Color,
+    rpaddle_color: Color,
     paddle_offset: f32,
     paddle_width: f32,
     paddle_height: f32,
@@ -306,13 +330,17 @@ struct GameBuilder {
 
 impl GameBuilder {
 
-    pub fn new() -> Self {
+    pub fn new() -> GameBuilder {
         GameBuilder {
-            screen_width: 480.,
-            screen_height: 320.,
+            arena_color: Color::RGB(0xff, 0xff, 0xff),
+            arena_width: 480.,
+            arena_height: 320.,
             fps: 40,
+            ball_color: Color::RGB(0xff, 0xff, 0xff),
             ball_speed: 320.,
             ball_diameter: 10.,
+            lpaddle_color: Color::RGB(0xff, 0xff, 0xff),
+            rpaddle_color: Color::RGB(0xff, 0xff, 0xff),
             paddle_offset: 4.,
             paddle_width: 10.,
             paddle_height: 80.,
@@ -321,48 +349,68 @@ impl GameBuilder {
         }
     }
 
-    pub fn with_dimensions(mut self, width: f32, height: f32) -> Self {
-        self.screen_width = width;
-        self.screen_height = height;
+    pub fn with_arena_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
+        self.arena_width = width;
+        self.arena_height = height;
         self
     }
 
-    pub fn with_fps(mut self, fps: u32) -> Self {
+    pub fn with_arena_color(mut self, color: Color) -> GameBuilder {
+        self.arena_color = color;
+        self
+    }
+
+    pub fn with_fps(mut self, fps: u32) -> GameBuilder {
         self.fps = fps; 
         self
     }
     
-    pub fn with_ball_speed_per_sec(mut self, ball_speed: f32) -> Self {
-        self.ball_speed = ball_speed; 
+    pub fn with_ball_color(mut self, color: Color) -> GameBuilder {
+        self.ball_color = color;
         self
     }
 
-    pub fn with_ball_diameter(mut self, ball_diameter: f32) -> Self {
-        self.ball_diameter = ball_diameter;
+    pub fn with_ball_speed_per_sec(mut self, speed: f32) -> GameBuilder {
+        self.ball_speed = speed; 
         self
     }
 
-    pub fn with_paddle_offset(mut self, paddle_offset: f32) -> Self {
-        self.paddle_offset = paddle_offset;
+    pub fn with_ball_diameter(mut self, diameter: f32) -> GameBuilder {
+        self.ball_diameter = diameter;
         self
     }
 
-    pub fn with_paddle_width(mut self, paddle_width: f32) -> Self {
-        self.paddle_width = paddle_width;
+    pub fn with_paddle_offset(mut self, offset: f32) -> GameBuilder {
+        self.paddle_offset = offset;
+        self
+    }
+
+    pub fn with_paddle_width(mut self, width: f32) -> GameBuilder {
+        self.paddle_width = width;
         self
     }
     
-    pub fn with_paddle_height(mut self, paddle_height: f32) -> Self {
-        self.paddle_height = paddle_height;
+    pub fn with_paddle_height(mut self, height: f32) -> GameBuilder {
+        self.paddle_height = height;
         self
     }
 
-    pub fn with_paddle_speed_per_sec(mut self, paddle_speed: f32) -> Self {
-        self.paddle_speed = paddle_speed; 
+    pub fn with_paddle_speed_per_sec(mut self, speed: f32) -> GameBuilder {
+        self.paddle_speed = speed; 
         self
     }
 
-    pub fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> Self {
+    pub fn with_left_paddle_color(mut self, color: Color) -> GameBuilder {
+        self.lpaddle_color = color;
+        self
+    }
+
+    pub fn with_right_paddle_color(mut self, color: Color) -> GameBuilder {
+        self.rpaddle_color = color;
+        self
+    }
+
+    pub fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> GameBuilder {
         self.max_bounce_angle = max_bounce_angle;
         self
     }
@@ -371,20 +419,24 @@ impl GameBuilder {
         let sdl_ctx = sdl2::init().unwrap();
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
-                self.screen_width as u32, self.screen_height as u32)
+                self.arena_width as u32, self.arena_height as u32)
                 .position_centered()
                 .build()
                 .unwrap();
         let renderer = window.renderer().build().unwrap();
-        Ui::new(self.screen_width, self.screen_height, sdl_ctx, renderer)
+        Ui::new(sdl_ctx, renderer)
+    }
+
+    fn create_arena(&self) -> Arena {
+        Arena::new(self.arena_color, self.arena_width, self.arena_height)
     }
 
     fn create_ball(&self) -> Ball {
         
         // Place ball at center of screen. 
         let diameter = self.ball_diameter;
-        let x = self.screen_width/2.;
-        let y = self.screen_height/2.;
+        let x = self.arena_width/2.;
+        let y = self.arena_height/2.;
 
         let speed = self.ball_speed;
         let mut rng = rand::thread_rng();
@@ -402,34 +454,35 @@ impl GameBuilder {
         // Use Pythagoras to determine the horizontal speed. Then, choose a
         // direction (left or right) to select a horizontal velocity.
         let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
-        Ball::new(x, y, diameter, speed, vx, vy)
+        Ball::new(self.ball_color, x, y, diameter, speed, vx, vy)
     }    
 
     fn create_left_paddle(&self) -> Paddle {
         let width = self.paddle_width;
         let height = self.paddle_height;
         let x = self.paddle_offset;
-        let y = (self.screen_height - height)/2.;
+        let y = (self.arena_height - height)/2.;
         let speed = self.paddle_speed;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, speed, vy, score)
+        Paddle::new(self.lpaddle_color, x, y, width, height, speed, vy, score)
     }
 
     fn create_right_paddle(&self) -> Paddle {
         let width = self.paddle_width;
         let height = self.paddle_height;
-        let x = self.screen_width - (self.paddle_offset + width);
-        let y = (self.screen_height - height)/2.;
+        let x = self.arena_width - (self.paddle_offset + width);
+        let y = (self.arena_height - height)/2.;
         let speed = self.paddle_speed;
         let vy = 0.;
         let score = 0;
-        Paddle::new(x, y, width, height, speed, vy, score)
+        Paddle::new(self.rpaddle_color, x, y, width, height, speed, vy, score)
     }
 
     pub fn build(&self) -> Game {
         Game::new(self.create_ui(), 
                   self.fps, 
+                  self.create_arena(),
                   self.create_ball(),
                   self.create_left_paddle(),
                   self.create_right_paddle())
@@ -437,16 +490,20 @@ impl GameBuilder {
 }
 
 fn main() {
-    // todo make colors configurable
+    // Moved the todos to Trello. 
     let mut game = GameBuilder::new()
-        .with_dimensions(800., 600.)
+        .with_arena_dimensions(800., 600.)
+        .with_arena_color(Color::RGB(0x00, 0x00, 0x00))
         .with_fps(40)
+        .with_ball_color(Color::RGB(0xff, 0x00, 0x00))
         .with_ball_speed_per_sec(400.)
         .with_ball_diameter(12.)
         .with_paddle_offset(4.)
         .with_paddle_width(20.)
         .with_paddle_height(80.)
         .with_paddle_speed_per_sec(1000.)
+        .with_left_paddle_color(Color::RGB(0xff, 0x00, 0x00))
+        .with_right_paddle_color(Color::RGB(0xff, 0x00, 0x00))
         .with_max_bounce_angle_rads(f32::consts::PI/12.)
         .build();
     game.start();
