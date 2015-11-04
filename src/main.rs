@@ -194,14 +194,23 @@ impl Game {
         let arena = &mut self.arena;
         let ball = &mut self.ball;
         
-        let new_ball_x = ball.x + ball.vx * dt_sec;
+        let mut new_ball_x = ball.x + ball.vx * dt_sec;
         let mut new_ball_y = ball.y + ball.vy * dt_sec;
 
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
-        } else if (new_ball_y + ball.diameter > (arena.height - 1.)) {
+        } else if new_ball_y + ball.diameter > arena.height - 1. {
             new_ball_y -= 2. * ((new_ball_y + ball.diameter) - (arena.height - 1.));
+            ball.vy = -ball.vy;
+        }
+
+        if new_ball_x < 0. {
+            new_ball_x = -new_ball_x;
+            ball.vx = -ball.vx;
+        } else if new_ball_x + ball.diameter > arena.width -1. {
+            new_ball_x -= 2. * ((new_ball_x + ball.diameter) - (arena.width - 1.));
+            ball.vx = -ball.vx;
         }
 
         ball.x = new_ball_x;
@@ -274,8 +283,8 @@ impl Game {
 
         // Draw the ball.
         let ball = &mut self.ball;
-        self.ui.renderer.filled_circle(ball.x as i16, 
-                                       ball.y as i16, 
+        self.ui.renderer.filled_circle((ball.x + ball.diameter/2.) as i16, 
+                                       (ball.y + ball.diameter/2.) as i16, 
                                        (ball.diameter/2.) as i16, 
                                        ball.color);
 
@@ -355,8 +364,8 @@ impl GameBuilder {
         self
     }
 
-    pub fn with_arena_color(mut self, color: Color) -> GameBuilder {
-        self.arena_color = color;
+    pub fn with_arena_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.arena_color = Color::RGB(r,g,b);
         self
     }
 
@@ -365,8 +374,8 @@ impl GameBuilder {
         self
     }
     
-    pub fn with_ball_color(mut self, color: Color) -> GameBuilder {
-        self.ball_color = color;
+    pub fn with_ball_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.ball_color = Color::RGB(r,g,b);
         self
     }
 
@@ -400,13 +409,13 @@ impl GameBuilder {
         self
     }
 
-    pub fn with_left_paddle_color(mut self, color: Color) -> GameBuilder {
-        self.lpaddle_color = color;
+    pub fn with_left_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.lpaddle_color = Color::RGB(r,g,b);
         self
     }
 
-    pub fn with_right_paddle_color(mut self, color: Color) -> GameBuilder {
-        self.rpaddle_color = color;
+    pub fn with_right_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.rpaddle_color = Color::RGB(r,g,b);
         self
     }
 
@@ -493,17 +502,17 @@ fn main() {
     // Moved the todos to Trello. 
     let mut game = GameBuilder::new()
         .with_arena_dimensions(800., 600.)
-        .with_arena_color(Color::RGB(0x00, 0x00, 0x00))
+        .with_arena_color(0x00, 0x00, 0x00)
         .with_fps(40)
-        .with_ball_color(Color::RGB(0xff, 0x00, 0x00))
+        .with_ball_color(0xff, 0xff, 0xff)
         .with_ball_speed_per_sec(400.)
-        .with_ball_diameter(12.)
+        .with_ball_diameter(11.)
         .with_paddle_offset(4.)
         .with_paddle_width(20.)
         .with_paddle_height(80.)
         .with_paddle_speed_per_sec(1000.)
-        .with_left_paddle_color(Color::RGB(0xff, 0x00, 0x00))
-        .with_right_paddle_color(Color::RGB(0xff, 0x00, 0x00))
+        .with_left_paddle_color(0xff, 0xff, 0xff)
+        .with_right_paddle_color(0xff, 0xff, 0xff)
         .with_max_bounce_angle_rads(f32::consts::PI/12.)
         .build();
     game.start();
