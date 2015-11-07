@@ -21,33 +21,33 @@ use std::thread;
 
 use sdl2_gfx::primitives::DrawRenderer;
 
-pub struct Ui {
+struct Ui {
     sdl_ctx: Sdl,
     renderer: Renderer<'static>
 }
 
 impl Ui {
-    pub fn new(sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
+    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
         Ui { 
             sdl_ctx: sdl_ctx, 
             renderer: renderer 
         }  
     } 
 
-    pub fn poll_event(&self) -> Option<Event> {
+    fn poll_event(&self) -> Option<Event> {
         let mut event_pump = self.sdl_ctx.event_pump().unwrap();
         return event_pump.poll_event();
     }
 }
 
-pub struct Arena {
+struct Arena {
     color: Color,
     width: f32,
     height: f32
 }
 
 impl Arena {
-    pub fn new(color: Color, width: f32, height: f32) -> Arena {
+    fn new(color: Color, width: f32, height: f32) -> Arena {
         Arena {
             color: color,
             width: width,
@@ -56,18 +56,18 @@ impl Arena {
     }
 }
 
-pub struct Ball {
-    pub color: Color,
-    pub x: f32,         // x pixel co-ordinate of top left corner
-    pub y: f32,         // y pixel co-ordinate of top left corner
-    pub diameter: f32,    
-    pub speed: f32,     // pixels per second 
-    pub vx: f32,        // pixels per second
-    pub vy: f32         // pixels per second
+struct Ball {
+    color: Color,
+    x: f32,         // x pixel co-ordinate of top left corner
+    y: f32,         // y pixel co-ordinate of top left corner
+    diameter: f32,    
+    speed: f32,     // pixels per second 
+    vx: f32,        // pixels per second
+    vy: f32         // pixels per second
 }
 
 impl Ball {
-    pub fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, vx: f32, 
+    fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, vx: f32, 
                vy: f32) -> Ball {
         Ball { 
             color: color, 
@@ -81,19 +81,19 @@ impl Ball {
     }
 }
 
-pub struct Paddle {
-    pub color: Color,
-    pub x: f32,         // x pixel co-ordinate of top left corner
-    pub y: f32,         // y pixel co-ordinate of top left corner
-    pub width: f32,     
-    pub height: f32,    
-    pub speed: f32,     // pixels per second
-    pub vy: f32,        // pixels per second
-    pub score: u32
+struct Paddle {
+    color: Color,
+    x: f32,         // x pixel co-ordinate of top left corner
+    y: f32,         // y pixel co-ordinate of top left corner
+    width: f32,     
+    height: f32,    
+    speed: f32,     // pixels per second
+    vy: f32,        // pixels per second
+    score: u32
 }
 
 impl Paddle {
-    pub fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
+    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
                score: u32) -> Paddle {
         Paddle { 
             color: color,
@@ -108,7 +108,7 @@ impl Paddle {
     }
 }
 
-pub struct Game {
+struct Game {
     ui: Ui,
     fps: u32,
     arena: Arena,
@@ -121,7 +121,7 @@ pub struct Game {
 impl Game {
 
     /// Create initial game state. 
-    pub fn new(ui: Ui, fps: u32, arena: Arena, ball: Ball, lpaddle: Paddle, 
+    fn new(ui: Ui, fps: u32, arena: Arena, ball: Ball, lpaddle: Paddle, 
                rpaddle: Paddle) -> Game { 
         Game { 
             ui: ui, 
@@ -135,7 +135,7 @@ impl Game {
     }
 
     /// Start the game and block until finished. 
-    pub fn start(&mut self) {
+    fn start(&mut self) {
         self.running = true;
         let mut time_last_invocation = clock_ticks::precise_time_ms();
         while self.running {
@@ -197,21 +197,22 @@ impl Game {
         let mut new_ball_x = ball.x + ball.vx * dt_sec;
         let mut new_ball_y = ball.y + ball.vy * dt_sec;
 
-        if new_ball_y < 0. {
+        if new_ball_y < 0. { 
+            // todo draw ball at wall and then draw at new position
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
-        } else if new_ball_y + ball.diameter > arena.height - 1. {
-            new_ball_y -= 2. * ((new_ball_y + ball.diameter) - (arena.height - 1.));
-            ball.vy = -ball.vy;
-        }
+        } else if new_ball_y + ball.diameter >= arena.height { 
+            new_ball_y = arena.height - (new_ball_y + ball.diameter - arena.height) - ball.diameter;
+            ball.vy = ball.vy;
+        } 
 
-        if new_ball_x < 0. {
+        if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
-        } else if new_ball_x + ball.diameter > arena.width -1. {
-            new_ball_x -= 2. * ((new_ball_x + ball.diameter) - (arena.width - 1.));
+        } else if new_ball_x + ball.diameter >= arena.width { 
+            new_ball_x = arena.width - (new_ball_x + ball.diameter - arena.width) - ball.diameter;
             ball.vx = -ball.vx;
-        }
+        } 
 
         ball.x = new_ball_x;
         ball.y = new_ball_y;
@@ -339,7 +340,7 @@ struct GameBuilder {
 
 impl GameBuilder {
 
-    pub fn new() -> GameBuilder {
+    fn new() -> GameBuilder {
         GameBuilder {
             arena_color: Color::RGB(0xff, 0xff, 0xff),
             arena_width: 480.,
@@ -358,68 +359,68 @@ impl GameBuilder {
         }
     }
 
-    pub fn with_arena_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
+    fn with_arena_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
         self.arena_width = width;
         self.arena_height = height;
         self
     }
 
-    pub fn with_arena_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+    fn with_arena_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.arena_color = Color::RGB(r,g,b);
         self
     }
 
-    pub fn with_fps(mut self, fps: u32) -> GameBuilder {
+    fn with_fps(mut self, fps: u32) -> GameBuilder {
         self.fps = fps; 
         self
     }
     
-    pub fn with_ball_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+    fn with_ball_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.ball_color = Color::RGB(r,g,b);
         self
     }
 
-    pub fn with_ball_speed_per_sec(mut self, speed: f32) -> GameBuilder {
+    fn with_ball_speed_per_sec(mut self, speed: f32) -> GameBuilder {
         self.ball_speed = speed; 
         self
     }
 
-    pub fn with_ball_diameter(mut self, diameter: f32) -> GameBuilder {
+    fn with_ball_diameter(mut self, diameter: f32) -> GameBuilder {
         self.ball_diameter = diameter;
         self
     }
 
-    pub fn with_paddle_offset(mut self, offset: f32) -> GameBuilder {
+    fn with_paddle_offset(mut self, offset: f32) -> GameBuilder {
         self.paddle_offset = offset;
         self
     }
 
-    pub fn with_paddle_width(mut self, width: f32) -> GameBuilder {
+    fn with_paddle_width(mut self, width: f32) -> GameBuilder {
         self.paddle_width = width;
         self
     }
     
-    pub fn with_paddle_height(mut self, height: f32) -> GameBuilder {
+    fn with_paddle_height(mut self, height: f32) -> GameBuilder {
         self.paddle_height = height;
         self
     }
 
-    pub fn with_paddle_speed_per_sec(mut self, speed: f32) -> GameBuilder {
+    fn with_paddle_speed_per_sec(mut self, speed: f32) -> GameBuilder {
         self.paddle_speed = speed; 
         self
     }
 
-    pub fn with_left_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+    fn with_left_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.lpaddle_color = Color::RGB(r,g,b);
         self
     }
 
-    pub fn with_right_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+    fn with_right_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.rpaddle_color = Color::RGB(r,g,b);
         self
     }
 
-    pub fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> GameBuilder {
+    fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> GameBuilder {
         self.max_bounce_angle = max_bounce_angle;
         self
     }
@@ -488,7 +489,7 @@ impl GameBuilder {
         Paddle::new(self.rpaddle_color, x, y, width, height, speed, vy, score)
     }
 
-    pub fn build(&self) -> Game {
+    fn build(&self) -> Game {
         Game::new(self.create_ui(), 
                   self.fps, 
                   self.create_arena(),
