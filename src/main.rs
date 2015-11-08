@@ -198,7 +198,6 @@ impl Game {
         let mut new_ball_y = ball.y + ball.vy * dt_sec;
 
         if new_ball_y < 0. { 
-            // todo draw ball at wall and then draw at new position
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
         } else if new_ball_y + ball.diameter >= arena.height { 
@@ -218,29 +217,6 @@ impl Game {
         ball.y = new_ball_y;
     }
     
-    fn check_for_ball_and_wall_collisions(&mut self) {
-        let arena = &mut self.arena;
-        let ball = &mut self.ball;
-
-        // Left or right wall.
-        if ball.x <= 0. && ball.vx < -0. {
-            ball.x = 0.;
-            ball.vx = -ball.vx; 
-        } else if ball.x + ball.diameter >= arena.width && ball.vx > 0. {
-            ball.x = arena.width - ball.diameter;
-            ball.vx = -ball.vx;
-        } 
-
-        // Top or bottom wall.
-        if ball.y <= 0. && ball.vy < -0. {
-            ball.y = 0.;
-            ball.vy = -ball.vy; 
-        } else if ball.y + ball.diameter >= arena.height && ball.vy > 0. {
-            ball.y = arena.height - ball.diameter;
-            ball.vy = -ball.vy;
-        }
-    }
-
     fn check_for_ball_and_lpaddle_collision(&mut self) {
         let ball = &mut self.ball;
         let lpaddle = &mut self.lpaddle;
