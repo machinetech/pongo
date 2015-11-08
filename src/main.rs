@@ -58,17 +58,18 @@ impl Arena {
 
 struct Ball {
     color: Color,
-    x: f32,         // x pixel co-ordinate of top left corner
-    y: f32,         // y pixel co-ordinate of top left corner
+    x: f32,                         // x pixel co-ordinate of top left corner
+    y: f32,                         // y pixel co-ordinate of top left corner
     diameter: f32,    
-    speed: f32,     // pixels per second 
-    vx: f32,        // pixels per second
-    vy: f32         // pixels per second
+    speed: f32,                     // pixels per second 
+    vx: f32,                        // pixels per second
+    vy: f32,         
+    max_paddle_bounce_angle: f32
 }
 
 impl Ball {
     fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, vx: f32, 
-               vy: f32) -> Ball {
+               vy: f32, max_paddle_bounce_angle: f32) -> Ball {
         Ball { 
             color: color, 
             x: x, 
@@ -76,7 +77,8 @@ impl Ball {
             diameter: diameter, 
             speed: speed, 
             vx: vx, 
-            vy: vy 
+            vy: vy,
+            max_paddle_bounce_angle: max_paddle_bounce_angle
         }
     }
 }
@@ -193,22 +195,58 @@ impl Game {
     fn update_ball_position(&mut self, dt_sec: f32) {
         let arena = &mut self.arena;
         let ball = &mut self.ball;
+        let lpaddle = &mut self.lpaddle;
+        let rpaddle = &mut self.rpaddle;
         
         let mut new_ball_x = ball.x + ball.vx * dt_sec;
         let mut new_ball_y = ball.y + ball.vy * dt_sec;
 
-        if new_ball_y < 0. { 
+        // top or bottom wall
+        if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
         } else if new_ball_y + ball.diameter >= arena.height { 
             new_ball_y = arena.height - (new_ball_y + ball.diameter - arena.height) - ball.diameter;
-            ball.vy = ball.vy;
+            ball.vy = -ball.vy;
         } 
 
+        // left or right paddle
+        if new_ball_x < lpaddle.x + lpaddle.width && ball.x >= lpaddle.x + lpaddle.width {
+            let bounce_x = lpaddle.x + lpaddle.width; 
+            let bounce_y = (ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y;
+            if bounce_y >= lpaddle.y && bounce_y <= lpaddle.y + lpaddle.height {
+                // Calculate y bounce position relative to center of paddle.
+                let relative_y = lpaddle.y + lpaddle.height / 2. - bounce_y;
+                // Use the ratio of the bounce position to half the height of the paddle as an
+                // angle modifier as per http://tinyurl.com/preafge
+                let bounce_angle_modifier = relative_y / (lpaddle.height / 2.);
+                let bounce_angle = bounce_angle_modifier * ball.max_paddle_bounce_angle;
+                ball.vx = ball.speed * bounce_angle.cos();
+                ball.vy = ball.speed * bounce_angle.sin() * -1.; 
+                // The imaginary distance travelled beyond the paddle equals the actual distance
+                // travelled after the bounce. To calculate the time it took to travel the distance
+                // after the bounce, we can take the total time and multiply that by a fraction
+                // equal to the ratio of the distance travelled beyond the ball to the total 
+                // distance travelled. This would equal the ratio of the hypotenuses of two similar
+                // triangles. We don't want to calculate the hypotenuses, but there is a shortcut:
+                // We can use the fact that the ratio of corresponding sides for similar triangles
+                // are always the same... instead of using the ratio of the hypotenuses, we can use
+                // the ratio of the opposite sides. In this case, that'd be the ratio of the y
+                // distances travelled:
+                let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
+                new_ball_x = bounce_x + ball.speed * bounce_angle.cos() * bounce_dt_sec;
+                new_ball_y = bounce_y + ball.speed * bounce_angle.sin() * bounce_dt_sec;
+            }
+        } else if new_ball_x + ball.diameter > lpaddle.x {
+
+        } 
+        
+
+        // left or right wall
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
-        } else if new_ball_x + ball.diameter >= arena.width { 
+        } else if new_ball_x + ball.diameter > arena.width { 
             new_ball_x = arena.width - (new_ball_x + ball.diameter - arena.width) - ball.diameter;
             ball.vx = -ball.vx;
         } 
@@ -311,6 +349,7 @@ struct GameBuilder {
     paddle_width: f32,
     paddle_height: f32,
     paddle_speed: f32,
+    max_launch_angle: f32,
     max_bounce_angle: f32
 }
 
@@ -331,6 +370,7 @@ impl GameBuilder {
             paddle_width: 10.,
             paddle_height: 80.,
             paddle_speed: 640.,
+            max_launch_angle: f32::consts::PI/4.,
             max_bounce_angle: f32::consts::PI/12.
         }
     }
@@ -396,6 +436,11 @@ impl GameBuilder {
         self
     }
 
+    fn with_max_launch_angle_rads(mut self, max_launch_angle: f32) -> GameBuilder {
+        self.max_launch_angle = max_launch_angle;
+        self
+    }
+    
     fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> GameBuilder {
         self.max_bounce_angle = max_bounce_angle;
         self
@@ -427,20 +472,19 @@ impl GameBuilder {
         let speed = self.ball_speed;
         let mut rng = rand::thread_rng();
 
-        // Launch at an angle less than or equal to 45 degrees.
-        let angle = Range::new(0., self.max_bounce_angle).ind_sample(&mut rng);
+        let launch_angle = Range::new(0., self.max_launch_angle).ind_sample(&mut rng);
         let dir = [-1., 1.];
 
         // Use the sine of the angle to determine the vertical speed. Then, 
         // choose a direction (up or down) to select a vertical velocity.
         let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-        let vy = angle.sin() * speed * up_or_down; 
+        let vy = launch_angle.sin() * speed * up_or_down; 
         let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
         
         // Use Pythagoras to determine the horizontal speed. Then, choose a
         // direction (left or right) to select a horizontal velocity.
         let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
-        Ball::new(self.ball_color, x, y, diameter, speed, vx, vy)
+        Ball::new(self.ball_color, x, y, diameter, speed, vx, vy, self.max_bounce_angle)
     }    
 
     fn create_left_paddle(&self) -> Paddle {
@@ -490,7 +534,8 @@ fn main() {
         .with_paddle_speed_per_sec(1000.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
-        .with_max_bounce_angle_rads(f32::consts::PI/12.)
+        .with_max_launch_angle_rads(f32::consts::PI/4.)
+        .with_max_bounce_angle_rads(f32::consts::PI/6.)
         .build();
     game.start();
 }
