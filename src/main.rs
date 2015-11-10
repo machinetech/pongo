@@ -164,26 +164,18 @@ impl Game {
                     Event::Quit{..} => {
                         self.running = false;
                     },
-                    Event::KeyDown{keycode,..} => match keycode {
-                        Option::Some(Keycode::Escape) => {
-                            self.running = false;
-                        },
-                        Option::Some(Keycode::Up) => {
-                            let arena = &mut self.arena;
-                            let lpaddle = &mut self.lpaddle;
-                            lpaddle.y -= lpaddle.speed * dt_sec;
-                            if lpaddle.y < 0. { lpaddle.y = 0.; }
-                        },
-                        Option::Some(Keycode::Down) => {
-                            let arena = &mut self.arena;
-                            let lpaddle = &mut self.lpaddle;
-                            lpaddle.y += lpaddle.speed * dt_sec;
-                            if lpaddle.y + lpaddle.height > arena.height {
-                                lpaddle.y = arena.height - lpaddle.height; 
-                            }
-                        },
-                        _ => {}
-                    },
+                    Event::MouseMotion{x,y, ..} => {
+                        let y = y as f32;
+                        let arena = &mut self.arena;
+                        let lpaddle = &mut self.lpaddle;
+                        lpaddle.y = y; 
+                        if lpaddle.y < 0. { 
+                            lpaddle.y = 0.; 
+                        }
+                        else if lpaddle.y + lpaddle.height > arena.height {
+                            lpaddle.y = arena.height - lpaddle.height; 
+                        }
+                    }
                     _ => {}
                 }
             },
@@ -260,39 +252,6 @@ impl Game {
         ball.y = new_ball_y;
     }
     
-    fn check_for_ball_and_lpaddle_collision(&mut self) {
-        let ball = &mut self.ball;
-        let lpaddle = &mut self.lpaddle;
-
-        //if ball.vx < 0. && ball.x < lpaddle.width && ball.x >= 0 {
-        //    
-        //    let x_intersect = lpaddle.width;
-        //    let y_intersect = ball.y - (ball.x - lpaddle.width) * 
-
-        //    // Calculate the ball's position relative to the center of the paddle. 
-        //    let relative_hit_loc = lpaddle.y + (lpaddle.height/2.) - (ball.y + ball.height/2.);
-        //    
-        //    let normalized_hit_loc = relative_hit_loc / (lpaddle.height/2.);
-        //    
-        //    // Calculate an angle multiplier as a percentage of half the paddle's height. 
-        //    let angle_multiplier = normalized_hit_loc / (lpaddle.height/2.);
-
-        //    // Set the maximum bounce angle to 75 degrees.
-        //    let max_angle = f32::consts::PI * 5./12.;
-
-        //    // Calculate the angle the ball should return at.
-        //    let angle = max_angle * angle_multiplier;
-
-        //    // Calculate new vertical and horizontal velocities.
-        //    let vx = angle.cos() * ball.speed;
-        //    let vy = angle.sin() * -ball.speed;
-        //   
-        //    ball.x = lpaddle.width;
-        //    ball.vx = vx;
-        //    ball.vy = vy;
-        //} 
-    }
-
     fn redraw(&mut self) {
         
         // Set the default drawing color (also the color of the background).
@@ -453,6 +412,7 @@ impl GameBuilder {
 
     fn create_ui(&self) -> Ui {
         let sdl_ctx = sdl2::init().unwrap();
+        sdl_ctx.mouse().show_cursor(false);
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
                 self.arena_width as u32, self.arena_height as u32)
