@@ -201,7 +201,7 @@ impl Game {
         let mut new_ball_x = ball.x + ball.vx * dt_sec;
         let mut new_ball_y = ball.y + ball.vy * dt_sec;
 
-        // top or bottom wall
+        // Top or bottom wall.
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
@@ -210,19 +210,24 @@ impl Game {
             ball.vy = -ball.vy;
         } 
 
-        // left or right paddle
-        if new_ball_x < lpaddle.x + lpaddle.width && ball.x >= lpaddle.x + lpaddle.width {
+        // Left or right paddle.
+        if new_ball_x < lpaddle.x + lpaddle.width {
             let bounce_x = lpaddle.x + lpaddle.width; 
-            let bounce_y = (ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y;
+            // The gradient of the straight line from (ball.x,ball.y) to (bounce_x,bounce_y) to
+            // (new_ball_x,new_ball_y) stays constant, so we can use that to find the value of the
+            // y location of the bounce.
+            let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
             if bounce_y >= lpaddle.y && bounce_y <= lpaddle.y + lpaddle.height {
-                // Calculate y bounce position relative to center of paddle.
+                // Calculate where ball hit relative to center of the paddle.
                 let relative_y = lpaddle.y + lpaddle.height / 2. - bounce_y;
                 // Use the ratio of the bounce position to half the height of the paddle as an
-                // angle modifier as per http://tinyurl.com/preafge
-                let bounce_angle_modifier = relative_y / (lpaddle.height / 2.);
-                let bounce_angle = bounce_angle_modifier * ball.max_paddle_bounce_angle;
+                // angle multiplier.
+                let bounce_angle_multiplier = relative_y / (lpaddle.height / 2.);
+                let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
+                // Calculate completely new x and y velocities using simple trigonometric
+                // identities.
                 ball.vx = ball.speed * bounce_angle.cos();
-                ball.vy = ball.speed * bounce_angle.sin() * -1.; 
+                ball.vy = ball.speed * bounce_angle.sin(); 
                 // The imaginary distance travelled beyond the paddle equals the actual distance
                 // travelled after the bounce. To calculate the time it took to travel the distance
                 // after the bounce, we can take the total time and multiply that by a fraction
@@ -242,7 +247,7 @@ impl Game {
         } 
         
 
-        // left or right wall
+        // Left or right wall.
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
@@ -529,13 +534,13 @@ fn main() {
         .with_ball_speed_per_sec(400.)
         .with_ball_diameter(11.)
         .with_paddle_offset(4.)
-        .with_paddle_width(20.)
+        .with_paddle_width(5.)
         .with_paddle_height(80.)
-        .with_paddle_speed_per_sec(1000.)
+        .with_paddle_speed_per_sec(1200.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
         .with_max_launch_angle_rads(f32::consts::PI/4.)
-        .with_max_bounce_angle_rads(f32::consts::PI/6.)
+        .with_max_bounce_angle_rads(f32::consts::PI/3.)
         .build();
     game.start();
 }
