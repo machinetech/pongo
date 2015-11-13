@@ -203,7 +203,7 @@ impl Game {
         } 
 
         // Left or right paddle.
-        if new_ball_x < lpaddle.x + lpaddle.width {
+        if new_ball_x < lpaddle.x + lpaddle.width  && ball.x >= lpaddle.x + lpaddle.width {
             let bounce_x = lpaddle.x + lpaddle.width; 
             // The gradient of the straight line from (ball.x,ball.y) to (bounce_x,bounce_y) to
             // (new_ball_x,new_ball_y) stays constant, so we can use that to find the value of the
@@ -214,12 +214,12 @@ impl Game {
                 let relative_y = lpaddle.y + lpaddle.height / 2. - bounce_y;
                 // Use the ratio of the bounce position to half the height of the paddle as an
                 // angle multiplier.
-                let bounce_angle_multiplier = relative_y / (lpaddle.height / 2.);
+                let bounce_angle_multiplier = (relative_y / (lpaddle.height / 2.)).abs();
                 let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
                 // Calculate completely new x and y velocities using simple trigonometric
                 // identities.
                 ball.vx = ball.speed * bounce_angle.cos();
-                ball.vy = ball.speed * bounce_angle.sin(); 
+                ball.vy = ball.speed * bounce_angle.sin() * if ball.vy < 0. {-1.} else {1.}; 
                 // The imaginary distance travelled beyond the paddle equals the actual distance
                 // travelled after the bounce. To calculate the time it took to travel the distance
                 // after the bounce, we can take the total time and multiply that by a fraction
@@ -231,13 +231,23 @@ impl Game {
                 // the ratio of the opposite sides. In this case, that'd be the ratio of the y
                 // distances travelled:
                 let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
-                new_ball_x = bounce_x + ball.speed * bounce_angle.cos() * bounce_dt_sec;
-                new_ball_y = bounce_y + ball.speed * bounce_angle.sin() * bounce_dt_sec;
+                new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
+                new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
             }
-        } else if new_ball_x + ball.diameter > lpaddle.x {
-
+        } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
+            let bounce_x = rpaddle.x; 
+            let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
+            if bounce_y >= rpaddle.y && bounce_y <= rpaddle.y + rpaddle.height {
+                let relative_y = rpaddle.y + rpaddle.height / 2. - bounce_y;
+                let bounce_angle_multiplier = (relative_y / (rpaddle.height / 2.)).abs();
+                let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
+                ball.vx = ball.speed * bounce_angle.cos() * -1.;
+                ball.vy = ball.speed * bounce_angle.sin() * if ball.vy < 0. {-1.} else {1.}; 
+                let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
+                new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
+                new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
+            }
         } 
-        
 
         // Left or right wall.
         if new_ball_x < 0. { 
@@ -413,6 +423,7 @@ impl GameBuilder {
     fn create_ui(&self) -> Ui {
         let sdl_ctx = sdl2::init().unwrap();
         sdl_ctx.mouse().show_cursor(false);
+        //let cursor = sdl2::mouse::Cursor::from_system(sdl2::mouse::SystemCursor::No).unwrap().set(); 
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
                 self.arena_width as u32, self.arena_height as u32)
