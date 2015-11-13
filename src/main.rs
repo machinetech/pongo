@@ -151,13 +151,14 @@ impl Game {
 
     // Called once per frame. 
     fn update(&mut self, dt_sec: f32) {
-        self.handle_input(dt_sec);
+        self.move_left_paddle(dt_sec);
+        self.move_right_paddle(dt_sec);
         self.update_ball_position(dt_sec);
         self.redraw()
     }
 
-    // Handle user input including moving the left paddle. 
-    fn handle_input(&mut self, dt_sec: f32) {
+    // Move the left paddle based on user input. 
+    fn move_left_paddle(&mut self, dt_sec: f32) {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
@@ -166,7 +167,7 @@ impl Game {
                     },
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
-                        let arena = &mut self.arena;
+                        let arena = &self.arena;
                         let lpaddle = &mut self.lpaddle;
                         lpaddle.y = y; 
                         if lpaddle.y < 0. { 
@@ -183,6 +184,28 @@ impl Game {
         }
     }
 
+    // The game moves the right paddle. 
+    fn move_right_paddle(&mut self, dt_sec: f32) {
+        let arena = &self.arena;
+        let ball = &self.ball;
+        let rpaddle = &mut self.rpaddle;
+        if ball.vx > 0. {
+            let bounce_x = rpaddle.x;
+            let bounce_y = ((ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y);
+            if bounce_y >= 0. && bounce_y + ball.diameter <= arena.height {
+                if bounce_y < rpaddle.y || bounce_y > rpaddle.y + rpaddle.height {
+                    rpaddle.y += rpaddle.speed * dt_sec * if ball.vy < 0. {-1.} else {1.};
+                }
+                if rpaddle.y < 0. { 
+                    rpaddle.y = 0.; 
+                }
+                else if rpaddle.y + rpaddle.height > arena.height {
+                    rpaddle.y = arena.height - rpaddle.height; 
+                }
+            } 
+        }
+    }
+        
     // Update the position of the ball and deal with wall and paddle collisions.
     fn update_ball_position(&mut self, dt_sec: f32) {
         let arena = &mut self.arena;
@@ -203,7 +226,7 @@ impl Game {
         } 
 
         // Left or right paddle.
-        if new_ball_x < lpaddle.x + lpaddle.width  && ball.x >= lpaddle.x + lpaddle.width {
+        if new_ball_x < lpaddle.x + lpaddle.width && ball.x >= lpaddle.x + lpaddle.width {
             let bounce_x = lpaddle.x + lpaddle.width; 
             // The gradient of the straight line from (ball.x,ball.y) to (bounce_x,bounce_y) to
             // (new_ball_x,new_ball_y) stays constant, so we can use that to find the value of the
@@ -497,6 +520,7 @@ impl GameBuilder {
 
 fn main() {
     // Moved the todos to Trello. 
+    // BALL BOUNCE SHOULD BE BASED AROUND CENTER OF BALL!
     let mut game = GameBuilder::new()
         .with_arena_dimensions(800., 600.)
         .with_arena_color(0x00, 0x00, 0x00)
