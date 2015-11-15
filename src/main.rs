@@ -190,10 +190,10 @@ impl Game {
         let ball = &self.ball;
         let rpaddle = &mut self.rpaddle;
         if ball.vx > 0. {
-            let bounce_x = rpaddle.x;
-            let bounce_y = ((ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y);
+            let bounce_x = rpaddle.x - ball.diameter;
+            let bounce_y = (ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y;
             if bounce_y >= 0. && bounce_y + ball.diameter <= arena.height {
-                if bounce_y < rpaddle.y || bounce_y > rpaddle.y + rpaddle.height {
+                if bounce_y < rpaddle.y || bounce_y + ball.diameter > rpaddle.y + rpaddle.height {
                     rpaddle.y += rpaddle.speed * dt_sec * if ball.vy < 0. {-1.} else {1.};
                 }
                 if rpaddle.y < 0. { 
@@ -230,11 +230,11 @@ impl Game {
             let bounce_x = lpaddle.x + lpaddle.width; 
             // The gradient of the straight line from (ball.x,ball.y) to (bounce_x,bounce_y) to
             // (new_ball_x,new_ball_y) stays constant, so we can use that to find the value of the
-            // y location of the bounce.
+            // top left corner of the ball when it bounces.  
             let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
-            if bounce_y >= lpaddle.y && bounce_y <= lpaddle.y + lpaddle.height {
-                // Calculate where ball hit relative to center of the paddle.
-                let relative_y = lpaddle.y + lpaddle.height / 2. - bounce_y;
+            if bounce_y + ball.diameter >= lpaddle.y && bounce_y <= lpaddle.y + lpaddle.height {
+                // Calculate where the center of the ball hit relative to center of the paddle.
+                let relative_y = (lpaddle.y + lpaddle.height / 2.) - (bounce_y + ball.diameter / 2.);
                 // Use the ratio of the bounce position to half the height of the paddle as an
                 // angle multiplier.
                 let bounce_angle_multiplier = (relative_y / (lpaddle.height / 2.)).abs();
@@ -258,10 +258,10 @@ impl Game {
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
             }
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
-            let bounce_x = rpaddle.x; 
+            let bounce_x = rpaddle.x - ball.diameter; 
             let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
-            if bounce_y >= rpaddle.y && bounce_y <= rpaddle.y + rpaddle.height {
-                let relative_y = rpaddle.y + rpaddle.height / 2. - bounce_y;
+            if bounce_y + ball.diameter  >= rpaddle.y && bounce_y <= rpaddle.y + rpaddle.height {
+                let relative_y = (rpaddle.y + rpaddle.height / 2.) - (bounce_y + ball.diameter / 2.);
                 let bounce_angle_multiplier = (relative_y / (rpaddle.height / 2.)).abs();
                 let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
                 ball.vx = ball.speed * bounce_angle.cos() * -1.;
@@ -526,12 +526,12 @@ fn main() {
         .with_arena_color(0x00, 0x00, 0x00)
         .with_fps(40)
         .with_ball_color(0xff, 0xff, 0xff)
-        .with_ball_speed_per_sec(400.)
+        .with_ball_speed_per_sec(200.)
         .with_ball_diameter(11.)
         .with_paddle_offset(4.)
         .with_paddle_width(5.)
         .with_paddle_height(80.)
-        .with_paddle_speed_per_sec(1200.)
+        .with_paddle_speed_per_sec(100.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
         .with_max_launch_angle_rads(f32::consts::PI/4.)
