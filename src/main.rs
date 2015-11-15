@@ -291,6 +291,24 @@ impl Game {
 
         // Clear the screen.
         self.ui.renderer.clear();
+        
+        // Draw the net.
+        let arena = &self.arena;
+        let num_net_dots = 20;
+        let num_net_gaps = num_net_dots - 1;
+        let net_dot_width = 10.;
+        let net_dot_height = arena.height / (num_net_dots + num_net_gaps) as f32;
+        for i in 0..num_net_dots + num_net_gaps + 1 {
+            let net_dot_x = arena.width / 2. - net_dot_width / 2.;
+            let net_dot_y = i as f32 * net_dot_height; 
+            self.ui.renderer.set_draw_color(if i % 2 == 0 {self.ball.color} else {self.arena.color});
+            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, 
+                                        net_dot_y as i32, 
+                                        net_dot_width as u32,
+                                        net_dot_height as u32);
+            self.ui.renderer.fill_rect(net_dot_rect);
+
+        }
 
         // Draw the ball.
         let ball = &mut self.ball;
