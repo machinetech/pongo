@@ -189,20 +189,17 @@ impl Game {
         let arena = &self.arena;
         let ball = &self.ball;
         let rpaddle = &mut self.rpaddle;
-        if ball.vx > 0. {
-            let bounce_x = rpaddle.x - ball.diameter;
-            let bounce_y = (ball.vy / ball.vx) * (bounce_x - ball.x) + ball.y;
-            if bounce_y >= 0. && bounce_y + ball.diameter <= arena.height {
-                if bounce_y < rpaddle.y || bounce_y + ball.diameter > rpaddle.y + rpaddle.height {
-                    rpaddle.y += rpaddle.speed * dt_sec * if ball.vy < 0. {-1.} else {1.};
-                }
-                if rpaddle.y < 0. { 
-                    rpaddle.y = 0.; 
-                }
-                else if rpaddle.y + rpaddle.height > arena.height {
-                    rpaddle.y = arena.height - rpaddle.height; 
-                }
-            } 
+        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { arena.height / 2. }; 
+        if tracking_y > rpaddle.y + rpaddle.height / 2. {
+            rpaddle.y += rpaddle.speed * dt_sec;
+        } else if tracking_y < rpaddle.y + rpaddle.height / 2. {
+            rpaddle.y -= rpaddle.speed * dt_sec;
+        }
+        if rpaddle.y < 0. { 
+            rpaddle.y = 0.; 
+        }
+        else if rpaddle.y + rpaddle.height > arena.height {
+            rpaddle.y = arena.height - rpaddle.height; 
         }
     }
         
@@ -276,9 +273,11 @@ impl Game {
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
+            rpaddle.score += 1;
         } else if new_ball_x + ball.diameter > arena.width { 
             new_ball_x = arena.width - (new_ball_x + ball.diameter - arena.width) - ball.diameter;
             ball.vx = -ball.vx;
+            lpaddle.score += 1;
         } 
 
         ball.x = new_ball_x;
@@ -526,12 +525,12 @@ fn main() {
         .with_arena_color(0x00, 0x00, 0x00)
         .with_fps(40)
         .with_ball_color(0xff, 0xff, 0xff)
-        .with_ball_speed_per_sec(200.)
+        .with_ball_speed_per_sec(400.)
         .with_ball_diameter(11.)
         .with_paddle_offset(4.)
         .with_paddle_width(5.)
         .with_paddle_height(80.)
-        .with_paddle_speed_per_sec(100.)
+        .with_paddle_speed_per_sec(300.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
         .with_max_launch_angle_rads(f32::consts::PI/4.)
