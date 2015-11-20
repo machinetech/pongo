@@ -2,6 +2,7 @@ extern crate clock_ticks;
 extern crate rand;
 extern crate sdl2;
 extern crate sdl2_gfx;
+extern crate sdl2_ttf;
 
 use rand::distributions::{IndependentSample, Range};
 
@@ -21,16 +22,20 @@ use std::thread;
 
 use sdl2_gfx::primitives::DrawRenderer;
 
+use sdl2_ttf::Sdl2TtfContext;
+
 struct Ui {
     sdl_ctx: Sdl,
-    renderer: Renderer<'static>
+    renderer: Renderer<'static>,
+    ttf_ctx: Sdl2TtfContext
 }
 
 impl Ui {
-    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>) -> Ui {
+    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext) -> Ui {
         Ui { 
             sdl_ctx: sdl_ctx, 
-            renderer: renderer 
+            renderer: renderer,
+            ttf_ctx: ttf_ctx
         }  
     } 
 
@@ -195,7 +200,7 @@ impl Game {
     fn update(&mut self, dt_sec: f32) {
         self.move_left_paddle(dt_sec);
         self.move_right_paddle(dt_sec);
-        self.update_ball_position(dt_sec);
+        self.move_ball(dt_sec);
         self.draw()
     }
 
@@ -245,8 +250,8 @@ impl Game {
         }
     }
         
-    // Update the position of the ball and deal with wall and paddle collisions.
-    fn update_ball_position(&mut self, dt_sec: f32) {
+    // Move the ball and deal with collisions. 
+    fn move_ball(&mut self, dt_sec: f32) {
         let table = &mut self.table;
         let ball = &mut self.ball;
         let lpaddle = &mut self.lpaddle;
@@ -465,8 +470,20 @@ impl GameBuilder {
                 .position_centered()
                 .build()
                 .unwrap();
-        let renderer = window.renderer().build().unwrap();
-        Ui::new(sdl_ctx, renderer)
+        let mut renderer = window.renderer().build().unwrap();
+        let ttf_ctx = sdl2_ttf::init().unwrap();
+        let font_path = Path::new("assets/fonts/arcade/ARCADE.TTF");
+        let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
+        let surface = font.render("10", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
+        let texture = renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(10,20,100,100);
+        renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        renderer.clear();
+        renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
+        renderer.copy(&texture, None, Some(target));
+        renderer.present();
+        std::thread::sleep_ms(5000);
+        Ui::new(sdl_ctx, renderer, ttf_ctx)
     }
 
     fn create_table(&self) -> Table {
@@ -532,17 +549,16 @@ impl GameBuilder {
 
 fn main() {
     // Moved the todos to Trello. 
-    // BALL BOUNCE SHOULD BE BASED AROUND CENTER OF BALL!
     let mut game = GameBuilder::new()
         .with_table_dimensions(800., 600.)
         .with_table_color(0x00, 0x00, 0x00)
         .with_fps(40)
         .with_ball_color(0xff, 0xff, 0xff)
-        .with_ball_speed_per_sec(400.)
+        .with_ball_speed_per_sec(500.)
         .with_ball_diameter(11.)
         .with_paddle_offset(4.)
         .with_paddle_width(5.)
-        .with_paddle_height(80.)
+        .with_paddle_height(60.)
         .with_paddle_speed_per_sec(300.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
