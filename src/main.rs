@@ -23,19 +23,22 @@ use std::thread;
 use sdl2_gfx::primitives::DrawRenderer;
 
 use sdl2_ttf::Sdl2TtfContext;
+use sdl2_ttf::Font;
 
 struct Ui {
     sdl_ctx: Sdl,
     renderer: Renderer<'static>,
-    ttf_ctx: Sdl2TtfContext
+    ttf_ctx: Sdl2TtfContext,
+    font: Font
 }
 
 impl Ui {
-    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext) -> Ui {
+    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext, font: Font) -> Ui {
         Ui { 
             sdl_ctx: sdl_ctx, 
             renderer: renderer,
-            ttf_ctx: ttf_ctx
+            ttf_ctx: ttf_ctx,
+            font: font
         }  
     } 
 
@@ -182,6 +185,20 @@ impl Game {
             running: false 
         }
     }
+    
+    /// Display welcome screen
+    fn show_welcome_screen(&mut self) {
+        self.ui.poll_event();
+        let surface = self.ui.font.render("Get Ready Player!", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
+        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(self.table.width  as i32 / 2 - 150, 20,300,50);
+        self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        self.ui.renderer.clear();
+        self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
+        self.ui.renderer.copy(&texture, None, Some(target));
+        self.ui.renderer.present();
+        thread::sleep_ms(2000);
+    }
 
     /// Start the game and block until finished. 
     fn start(&mut self) {
@@ -195,7 +212,7 @@ impl Game {
             time_last_invocation = time_this_invocation;
         } 
     }
-
+    
     // Called once per frame. 
     fn update(&mut self, dt_sec: f32) {
         self.move_left_paddle(dt_sec);
@@ -203,15 +220,15 @@ impl Game {
         self.move_ball(dt_sec);
         self.draw()
     }
-
+    
     // Move the left paddle based on user input. 
     fn move_left_paddle(&mut self, dt_sec: f32) {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
-                    Event::Quit{..} => {
+                    Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         self.running = false;
-                    },
+                    }
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
                         let table = &self.table;
@@ -472,18 +489,9 @@ impl GameBuilder {
                 .unwrap();
         let mut renderer = window.renderer().build().unwrap();
         let ttf_ctx = sdl2_ttf::init().unwrap();
-        let font_path = Path::new("assets/fonts/arcade/ARCADE.TTF");
+        let font_path = Path::new("assets/fonts/c64_pro_style.ttf");
         let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
-        let surface = font.render("10", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
-        let texture = renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(10,20,100,100);
-        renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
-        renderer.clear();
-        renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
-        renderer.copy(&texture, None, Some(target));
-        renderer.present();
-        std::thread::sleep_ms(5000);
-        Ui::new(sdl_ctx, renderer, ttf_ctx)
+        Ui::new(sdl_ctx, renderer, ttf_ctx, font)
     }
 
     fn create_table(&self) -> Table {
@@ -565,5 +573,6 @@ fn main() {
         .with_max_launch_angle_rads(f32::consts::PI/4.)
         .with_max_bounce_angle_rads(f32::consts::PI/3.)
         .build();
+    game.show_welcome_screen();
     game.start();
 }
