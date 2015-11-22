@@ -89,6 +89,39 @@ impl Table {
     }
 }
 
+struct Scoreboard {
+    color: Color,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    left_score: u32,
+    right_score: u32
+}
+
+impl Scoreboard {
+    fn new(color: Color, x: f32, y: f32, width: f32, height: f32) -> Scoreboard {
+        Scoreboard {
+            color: color,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            left_score: 0,
+            right_score: 0
+        }
+    }
+
+    fn draw(&self, ui: &mut Ui) {
+        let formatted_score = format!("{:<2}{:>2}", self.left_score, self.right_score);
+        let surface = ui.font.render(formatted_score.trim(), sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
+        let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(320, 20,160,30);
+        ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
+        ui.renderer.copy(&texture, None, Some(target));
+    }
+}
+
 struct Ball {
     color: Color,
     x: f32,                         // x pixel co-ordinate of top left corner
@@ -132,12 +165,10 @@ struct Paddle {
     height: f32,    
     speed: f32,     // pixels per second
     vy: f32,        // pixels per second
-    score: u32
 }
 
 impl Paddle {
-    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32, 
-               score: u32) -> Paddle {
+    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32) -> Paddle {
         Paddle { 
             color: color,
             x: x, 
@@ -145,8 +176,7 @@ impl Paddle {
             width: width, 
             height: height, 
             speed: speed, 
-            vy: vy, 
-            score: score 
+            vy: vy
         }
     }
 
@@ -164,6 +194,7 @@ struct Game {
     ui: Ui,
     fps: u32,
     table: Table,
+    scoreboard: Scoreboard,
     ball: Ball,
     lpaddle: Paddle,
     rpaddle: Paddle,
@@ -173,12 +204,13 @@ struct Game {
 impl Game {
 
     /// Create initial game state. 
-    fn new(ui: Ui, fps: u32, table: Table, ball: Ball, lpaddle: Paddle, 
-               rpaddle: Paddle) -> Game { 
+    fn new(ui: Ui, fps: u32, table: Table, scoreboard: Scoreboard, ball: Ball, lpaddle: Paddle, 
+           rpaddle: Paddle) -> Game { 
         Game { 
             ui: ui, 
             fps: fps, 
             table: table,
+            scoreboard: scoreboard,
             ball: ball, 
             lpaddle: lpaddle, 
             rpaddle: rpaddle, 
@@ -269,7 +301,9 @@ impl Game {
         
     // Move the ball and deal with collisions. 
     fn move_ball(&mut self, dt_sec: f32) {
+
         let table = &mut self.table;
+        let scoreboard = &mut self.scoreboard;
         let ball = &mut self.ball;
         let lpaddle = &mut self.lpaddle;
         let rpaddle = &mut self.rpaddle;
@@ -337,11 +371,11 @@ impl Game {
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
-            rpaddle.score += 1;
+            scoreboard.left_score += 1;    
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
-            lpaddle.score += 1;
+            scoreboard.right_score += 1;    
         } 
 
         ball.x = new_ball_x;
@@ -350,6 +384,7 @@ impl Game {
     
     fn draw(&mut self) {
         self.table.draw(&mut self.ui);
+        self.scoreboard.draw(&mut self.ui);
         self.ball.draw(&mut self.ui);
         self.lpaddle.draw(&mut self.ui);
         self.rpaddle.draw(&mut self.ui);
@@ -370,6 +405,9 @@ struct GameBuilder {
     table_color: Color,
     table_width: f32,
     table_height: f32,
+    scoreboard_color: Color,
+    scoreboard_width: f32,
+    scoreboard_height: f32,
     fps: u32,
     ball_color: Color,
     ball_speed: f32,
@@ -391,6 +429,9 @@ impl GameBuilder {
             table_color: Color::RGB(0xff, 0xff, 0xff),
             table_width: 480.,
             table_height: 320.,
+            scoreboard_color: Color::RGB(0xff, 0xff, 0xff),
+            scoreboard_width: 300.,
+            scoreboard_height: 100.,
             fps: 40,
             ball_color: Color::RGB(0xff, 0xff, 0xff),
             ball_speed: 320.,
@@ -412,11 +453,21 @@ impl GameBuilder {
         self
     }
 
+    fn with_scoreboard_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.scoreboard_color = Color::RGB(r,g,b);
+        self
+    }
+
+    fn with_scoreboard_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
+        self.scoreboard_width = width;
+        self.scoreboard_height = height;
+        self
+    }
+
     fn with_table_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.table_color = Color::RGB(r,g,b);
         self
     }
-
     fn with_fps(mut self, fps: u32) -> GameBuilder {
         self.fps = fps; 
         self
@@ -498,6 +549,12 @@ impl GameBuilder {
         Table::new(self.table_color, self.table_width, self.table_height)
     }
 
+    fn create_scoreboard(&self) -> Scoreboard {
+        let x = self.table_width / 2. - self.scoreboard_width / 2.;
+        let y = 100.;
+        Scoreboard::new(self.scoreboard_color, x, y, self.scoreboard_width, self.scoreboard_height)
+    }
+    
     fn create_ball(&self) -> Ball {
         
         // Place ball at center of screen. 
@@ -530,8 +587,7 @@ impl GameBuilder {
         let y = (self.table_height - height)/2.;
         let speed = self.paddle_speed;
         let vy = 0.;
-        let score = 0;
-        Paddle::new(self.lpaddle_color, x, y, width, height, speed, vy, score)
+        Paddle::new(self.lpaddle_color, x, y, width, height, speed, vy)
     }
 
     fn create_right_paddle(&self) -> Paddle {
@@ -541,14 +597,14 @@ impl GameBuilder {
         let y = (self.table_height - height)/2.;
         let speed = self.paddle_speed;
         let vy = 0.;
-        let score = 0;
-        Paddle::new(self.rpaddle_color, x, y, width, height, speed, vy, score)
+        Paddle::new(self.rpaddle_color, x, y, width, height, speed, vy)
     }
 
     fn build(&self) -> Game {
         Game::new(self.create_ui(), 
                   self.fps, 
                   self.create_table(),
+                  self.create_scoreboard(),
                   self.create_ball(),
                   self.create_left_paddle(),
                   self.create_right_paddle())
@@ -560,7 +616,8 @@ fn main() {
     let mut game = GameBuilder::new()
         .with_table_dimensions(800., 600.)
         .with_table_color(0x00, 0x00, 0x00)
-        .with_fps(40)
+        .with_scoreboard_dimensions(300., 100.)
+        .with_scoreboard_color(0x00, 0x00, 0x00)
         .with_ball_color(0xff, 0xff, 0xff)
         .with_ball_speed_per_sec(500.)
         .with_ball_diameter(11.)
@@ -572,6 +629,7 @@ fn main() {
         .with_right_paddle_color(0xff, 0xff, 0xff)
         .with_max_launch_angle_rads(f32::consts::PI/4.)
         .with_max_bounce_angle_rads(f32::consts::PI/3.)
+        .with_fps(40)
         .build();
     game.show_welcome_screen();
     game.start();
