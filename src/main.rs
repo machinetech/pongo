@@ -13,11 +13,10 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
 use sdl2::Sdl;
-use sdl2::TimerSubsystem;
-use sdl2::VideoSubsystem;
-use std::default::Default;
+
 use std::f32;
 use std::path::Path;
+use std::string::String;
 use std::thread;
 
 use sdl2_gfx::primitives::DrawRenderer;
@@ -51,25 +50,48 @@ impl Ui {
 struct Table {
     color: Color,
     width: f32,
-    height: f32
+    height: f32,
+    net_color: Color,
+    lscore: u32,
+    lscore_color: Color,
+    rscore: u32,
+    rscore_color: Color
 }
 
 impl Table {
-    fn new(color: Color, width: f32, height: f32) -> Table {
+    fn new(color: Color, width: f32, height: f32, net_color: Color, 
+           lscore_color: Color, rscore_color: Color) -> Table {
         Table {
             color: color,
             width: width,
-            height: height
+            height: height,
+            net_color: net_color,
+            lscore: 0,
+            rscore: 0,
+            lscore_color: lscore_color,
+            rscore_color: rscore_color
         }
     }
 
     fn draw(&self, ui: &mut Ui) {
-
-        // Fill the table background.
         ui.renderer.set_draw_color(self.color);
         ui.renderer.clear();
-        
-        // Draw the net.
+       
+        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
+        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
+        self.draw_net(ui); 
+    }
+
+    fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
+        let formatted_score = format!("{:^3}", score);
+        let formatted_score_ref: &str = formatted_score.as_ref();
+        let surface = ui.font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
+        let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
+        ui.renderer.copy(&texture, None, Some(target));
+    }
+
+    fn draw_net(&self, ui: &mut Ui) {
         let num_net_dots = 20;
         let num_net_gaps = num_net_dots - 1;
         let net_dot_width = 10.;
@@ -77,48 +99,13 @@ impl Table {
         for i in 0..num_net_dots + num_net_gaps + 1 {
             let net_dot_x = self.width / 2. - net_dot_width / 2.;
             let net_dot_y = i as f32 * net_dot_height; 
-            // todo: Need separate net color in table.
-            ui.renderer.set_draw_color(if i % 2 == 0 {Color::RGB(0xff, 0xff, 0xff)} else {self.color});
+            ui.renderer.set_draw_color(if i % 2 == 0 {self.net_color} else {self.color});
             let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, 
                                         net_dot_y as i32, 
                                         net_dot_width as u32,
                                         net_dot_height as u32);
             ui.renderer.fill_rect(net_dot_rect);
         }
-
-    }
-}
-
-struct Scoreboard {
-    color: Color,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    left_score: u32,
-    right_score: u32
-}
-
-impl Scoreboard {
-    fn new(color: Color, x: f32, y: f32, width: f32, height: f32) -> Scoreboard {
-        Scoreboard {
-            color: color,
-            x: x,
-            y: y,
-            width: width,
-            height: height,
-            left_score: 0,
-            right_score: 0
-        }
-    }
-
-    fn draw(&self, ui: &mut Ui) {
-        let formatted_score = format!("{:<2}{:>2}", self.left_score, self.right_score);
-        let surface = ui.font.render(formatted_score.trim(), sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
-        let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(320, 20,160,30);
-        ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
-        ui.renderer.copy(&texture, None, Some(target));
     }
 }
 
@@ -163,20 +150,18 @@ struct Paddle {
     y: f32,         // y pixel co-ordinate of top left corner
     width: f32,     
     height: f32,    
-    speed: f32,     // pixels per second
-    vy: f32,        // pixels per second
+    speed: f32     // pixels per second
 }
 
 impl Paddle {
-    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32, vy: f32) -> Paddle {
+    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32) -> Paddle {
         Paddle { 
             color: color,
             x: x, 
             y: y, 
             width: width, 
             height: height, 
-            speed: speed, 
-            vy: vy
+            speed: speed 
         }
     }
 
@@ -194,7 +179,6 @@ struct Game {
     ui: Ui,
     fps: u32,
     table: Table,
-    scoreboard: Scoreboard,
     ball: Ball,
     lpaddle: Paddle,
     rpaddle: Paddle,
@@ -204,13 +188,12 @@ struct Game {
 impl Game {
 
     /// Create initial game state. 
-    fn new(ui: Ui, fps: u32, table: Table, scoreboard: Scoreboard, ball: Ball, lpaddle: Paddle, 
+    fn new(ui: Ui, fps: u32, table: Table, ball: Ball, lpaddle: Paddle, 
            rpaddle: Paddle) -> Game { 
         Game { 
             ui: ui, 
             fps: fps, 
             table: table,
-            scoreboard: scoreboard,
             ball: ball, 
             lpaddle: lpaddle, 
             rpaddle: rpaddle, 
@@ -221,9 +204,9 @@ impl Game {
     /// Display welcome screen
     fn show_welcome_screen(&mut self) {
         self.ui.poll_event();
-        let surface = self.ui.font.render("Get Ready Player!", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
+        let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(self.table.width  as i32 / 2 - 150, 20,300,50);
+        let target = Rect::new_unwrap(self.table.width  as i32 / 2 - 200, 20, 400, 50);
         self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
         self.ui.renderer.clear();
         self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
@@ -303,7 +286,6 @@ impl Game {
     fn move_ball(&mut self, dt_sec: f32) {
 
         let table = &mut self.table;
-        let scoreboard = &mut self.scoreboard;
         let ball = &mut self.ball;
         let lpaddle = &mut self.lpaddle;
         let rpaddle = &mut self.rpaddle;
@@ -371,11 +353,11 @@ impl Game {
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
-            scoreboard.left_score += 1;    
+            table.rscore += 1;    
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
-            scoreboard.right_score += 1;    
+            table.lscore += 1;    
         } 
 
         ball.x = new_ball_x;
@@ -384,7 +366,6 @@ impl Game {
     
     fn draw(&mut self) {
         self.table.draw(&mut self.ui);
-        self.scoreboard.draw(&mut self.ui);
         self.ball.draw(&mut self.ui);
         self.lpaddle.draw(&mut self.ui);
         self.rpaddle.draw(&mut self.ui);
@@ -405,9 +386,7 @@ struct GameBuilder {
     table_color: Color,
     table_width: f32,
     table_height: f32,
-    scoreboard_color: Color,
-    scoreboard_width: f32,
-    scoreboard_height: f32,
+    net_color: Color,
     fps: u32,
     ball_color: Color,
     ball_speed: f32,
@@ -426,12 +405,10 @@ impl GameBuilder {
 
     fn new() -> GameBuilder {
         GameBuilder {
-            table_color: Color::RGB(0xff, 0xff, 0xff),
+            table_color: Color::RGB(0x00, 0x00, 0x00),
             table_width: 480.,
             table_height: 320.,
-            scoreboard_color: Color::RGB(0xff, 0xff, 0xff),
-            scoreboard_width: 300.,
-            scoreboard_height: 100.,
+            net_color: Color::RGB(0xff, 0xff, 0xff),
             fps: 40,
             ball_color: Color::RGB(0xff, 0xff, 0xff),
             ball_speed: 320.,
@@ -453,21 +430,16 @@ impl GameBuilder {
         self
     }
 
-    fn with_scoreboard_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.scoreboard_color = Color::RGB(r,g,b);
-        self
-    }
-
-    fn with_scoreboard_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
-        self.scoreboard_width = width;
-        self.scoreboard_height = height;
-        self
-    }
-
     fn with_table_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
         self.table_color = Color::RGB(r,g,b);
         self
     }
+
+    fn with_net_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
+        self.net_color = Color::RGB(r,g,b);
+        self
+    }
+    
     fn with_fps(mut self, fps: u32) -> GameBuilder {
         self.fps = fps; 
         self
@@ -538,23 +510,18 @@ impl GameBuilder {
                 .position_centered()
                 .build()
                 .unwrap();
-        let mut renderer = window.renderer().build().unwrap();
+        let renderer = window.renderer().build().unwrap();
         let ttf_ctx = sdl2_ttf::init().unwrap();
-        let font_path = Path::new("assets/fonts/c64_pro_style.ttf");
+        let font_path = Path::new("assets/fonts/absender.ttf");
         let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
         Ui::new(sdl_ctx, renderer, ttf_ctx, font)
     }
 
     fn create_table(&self) -> Table {
-        Table::new(self.table_color, self.table_width, self.table_height)
+        Table::new(self.table_color, self.table_width, self.table_height, self.net_color,
+                   self.lpaddle_color, self.rpaddle_color)
     }
 
-    fn create_scoreboard(&self) -> Scoreboard {
-        let x = self.table_width / 2. - self.scoreboard_width / 2.;
-        let y = 100.;
-        Scoreboard::new(self.scoreboard_color, x, y, self.scoreboard_width, self.scoreboard_height)
-    }
-    
     fn create_ball(&self) -> Ball {
         
         // Place ball at center of screen. 
@@ -586,8 +553,7 @@ impl GameBuilder {
         let x = self.paddle_offset;
         let y = (self.table_height - height)/2.;
         let speed = self.paddle_speed;
-        let vy = 0.;
-        Paddle::new(self.lpaddle_color, x, y, width, height, speed, vy)
+        Paddle::new(self.lpaddle_color, x, y, width, height, speed)
     }
 
     fn create_right_paddle(&self) -> Paddle {
@@ -596,15 +562,13 @@ impl GameBuilder {
         let x = self.table_width - (self.paddle_offset + width);
         let y = (self.table_height - height)/2.;
         let speed = self.paddle_speed;
-        let vy = 0.;
-        Paddle::new(self.rpaddle_color, x, y, width, height, speed, vy)
+        Paddle::new(self.rpaddle_color, x, y, width, height, speed)
     }
 
     fn build(&self) -> Game {
         Game::new(self.create_ui(), 
                   self.fps, 
                   self.create_table(),
-                  self.create_scoreboard(),
                   self.create_ball(),
                   self.create_left_paddle(),
                   self.create_right_paddle())
@@ -612,12 +576,10 @@ impl GameBuilder {
 }
 
 fn main() {
-    // Moved the todos to Trello. 
     let mut game = GameBuilder::new()
         .with_table_dimensions(800., 600.)
         .with_table_color(0x00, 0x00, 0x00)
-        .with_scoreboard_dimensions(300., 100.)
-        .with_scoreboard_color(0x00, 0x00, 0x00)
+        .with_net_color(0xff, 0xff, 0xff)
         .with_ball_color(0xff, 0xff, 0xff)
         .with_ball_speed_per_sec(500.)
         .with_ball_diameter(11.)
