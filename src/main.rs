@@ -586,7 +586,7 @@ impl GameBuilder {
 fn main() {
     let mut game = GameBuilder::new()
         .with_table_dimensions(800., 600.)
-        .with_table_color(0x00, 0x00, 0x00)
+        .with_table_color(0x25, 0x25, 0x25)
         .with_net_color(0xf4, 0xf3, 0xee)
         .with_ball_color(0xff, 0xcc, 0x00)
         .with_ball_speed_per_sec(500.)
