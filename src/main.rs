@@ -231,9 +231,9 @@ impl Game {
     
     // Called once per frame. 
     fn update(&mut self, dt_sec: f32) {
+        self.move_ball(dt_sec);
         self.move_left_paddle(dt_sec);
         self.move_right_paddle(dt_sec);
-        self.move_ball(dt_sec);
         self.draw()
     }
     
@@ -269,11 +269,18 @@ impl Game {
         let table = &self.table;
         let ball = &self.ball;
         let rpaddle = &mut self.rpaddle;
+        // Move toward oncoming ball. If the ball is moving away, head for the home position.
         let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { table.height / 2. }; 
-        if tracking_y > rpaddle.y + rpaddle.height / 2. {
+        if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
             rpaddle.y += rpaddle.speed * dt_sec;
-        } else if tracking_y < rpaddle.y + rpaddle.height / 2. {
+            if rpaddle.y > tracking_y {
+                rpaddle.y = tracking_y - rpaddle.height / 2.;
+            }
+        } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
             rpaddle.y -= rpaddle.speed * dt_sec;
+            if rpaddle.y + rpaddle.height < tracking_y {
+                rpaddle.y = tracking_y - rpaddle.height / 2.;
+            }
         }
         if rpaddle.y < 0. { 
             rpaddle.y = 0.; 
@@ -591,7 +598,7 @@ fn main() {
         .with_left_paddle_color(0xf6, 0xf4, 0xda)
         .with_right_paddle_color(0xd9, 0xe2, 0xe1)
         .with_max_launch_angle_rads(f32::consts::PI*50./180.)
-        .with_max_bounce_angle_rads(f32::consts::PI*50./180.)
+        .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
         .with_fps(40)
         .build();
     game.show_welcome_screen();
