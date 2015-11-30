@@ -79,7 +79,7 @@ impl Table {
        
         self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
         self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
-        self.draw_net(ui); 
+        self.draw_net(ui);
     }
 
     fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
@@ -204,7 +204,8 @@ impl Game {
     /// Display welcome screen
     fn show_welcome_screen(&mut self) {
         self.ui.poll_event();
-        let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(Color::RGB(0xff, 0xff, 0xff))).unwrap();
+        let color = Color::RGB(0xff, 0xff, 0xff);
+        let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(self.table.width  as i32 / 2 - 200, 20, 400, 50);
         self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
@@ -589,8 +590,8 @@ fn main() {
         .with_paddle_speed_per_sec(300.)
         .with_left_paddle_color(0xff, 0xff, 0xff)
         .with_right_paddle_color(0xff, 0xff, 0xff)
-        .with_max_launch_angle_rads(f32::consts::PI/4.)
-        .with_max_bounce_angle_rads(f32::consts::PI/3.)
+        .with_max_launch_angle_rads(f32::consts::PI*50./180.)
+        .with_max_bounce_angle_rads(f32::consts::PI*50./180.)
         .with_fps(40)
         .build();
     game.show_welcome_screen();
