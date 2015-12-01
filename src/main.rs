@@ -2,17 +2,17 @@ extern crate clock_ticks;
 extern crate rand;
 extern crate sdl2;
 extern crate sdl2_gfx;
+extern crate sdl2_mixer;
 extern crate sdl2_ttf;
 
 use rand::distributions::{IndependentSample, Range};
 
+use sdl2::{AudioSubsystem, Sdl};
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::keyboard::Scancode;
+use sdl2::keyboard::{Keycode, Scancode};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
-use sdl2::Sdl;
 
 use std::f32;
 use std::path::Path;
@@ -20,24 +20,30 @@ use std::string::String;
 use std::thread;
 
 use sdl2_gfx::primitives::DrawRenderer;
-
-use sdl2_ttf::Sdl2TtfContext;
-use sdl2_ttf::Font;
+use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
+use sdl2_ttf::{Font, Sdl2TtfContext}; 
 
 struct Ui {
     sdl_ctx: Sdl,
     renderer: Renderer<'static>,
     ttf_ctx: Sdl2TtfContext,
-    font: Font
+    font: Font,
+    sdl_audio: AudioSubsystem, 
+    ping_sound: Music,
+    pong_sound: Music
 }
 
 impl Ui {
-    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext, font: Font) -> Ui {
+    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext, font: Font,
+           sdl_audio: AudioSubsystem, ping_sound: Music, pong_sound: Music) -> Ui {
         Ui { 
             sdl_ctx: sdl_ctx, 
             renderer: renderer,
             ttf_ctx: ttf_ctx,
-            font: font
+            font: font,
+            sdl_audio: sdl_audio,
+            ping_sound: ping_sound,
+            pong_sound: pong_sound
         }  
     } 
 
@@ -305,9 +311,11 @@ impl Game {
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
+            self.ui.ping_sound.play(1);
         } else if new_ball_y + ball.diameter >= table.height { 
             new_ball_y = table.height - (new_ball_y + ball.diameter - table.height) - ball.diameter;
             ball.vy = -ball.vy;
+            self.ui.ping_sound.play(1);
         } 
 
         // Left or right paddle.
@@ -341,6 +349,7 @@ impl Game {
                 let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
+                self.ui.pong_sound.play(1);
             }
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
             let bounce_x = rpaddle.x - ball.diameter; 
@@ -354,6 +363,7 @@ impl Game {
                 let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
+                self.ui.pong_sound.play(1);
             }
         } 
 
@@ -362,10 +372,12 @@ impl Game {
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
             table.rscore += 1;    
+            self.ui.ping_sound.play(1);
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
             table.lscore += 1;    
+            self.ui.ping_sound.play(1);
         } 
 
         ball.x = new_ball_x;
@@ -522,7 +534,13 @@ impl GameBuilder {
         let ttf_ctx = sdl2_ttf::init().unwrap();
         let font_path = Path::new("assets/fonts/absender.ttf");
         let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
-        Ui::new(sdl_ctx, renderer, ttf_ctx, font)
+        let sdl_audio = sdl_ctx.audio().unwrap();
+        sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
+        let ping_sound_path = Path::new("assets/sounds/ping.wav");
+        let ping_sound = sdl2_mixer::Music::from_file(ping_sound_path).unwrap();
+        let pong_sound_path = Path::new("assets/sounds/pong.wav");
+        let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
+        Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound)
     }
 
     fn create_table(&self) -> Table {
