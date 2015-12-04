@@ -14,10 +14,13 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
 
+use std::cell::RefCell;
 use std::f32;
 use std::path::Path;
+use std::rc::Rc;
 use std::string::String;
 use std::thread;
+use std::vec::Vec;
 
 use sdl2_gfx::primitives::DrawRenderer;
 use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
@@ -53,6 +56,10 @@ impl Ui {
     }
 }
 
+trait Drawable {
+    fn draw(&self, ui: &mut Ui); 
+}
+
 struct Table {
     color: Color,
     width: f32,
@@ -77,15 +84,6 @@ impl Table {
             lscore_color: lscore_color,
             rscore_color: rscore_color
         }
-    }
-
-    fn draw(&self, ui: &mut Ui) {
-        ui.renderer.set_draw_color(self.color);
-        ui.renderer.clear();
-       
-        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
-        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
-        self.draw_net(ui);
     }
 
     fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
@@ -115,6 +113,19 @@ impl Table {
     }
 }
 
+impl Drawable for Table {
+    
+    fn draw(&self, ui: &mut Ui) {
+        ui.renderer.set_draw_color(self.color);
+        ui.renderer.clear();
+       
+        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
+        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
+        self.draw_net(ui);
+    }
+
+}
+
 struct Ball {
     color: Color,
     x: f32,                         // x pixel co-ordinate of top left corner
@@ -141,7 +152,9 @@ impl Ball {
             max_paddle_bounce_angle: max_paddle_bounce_angle
         }
     }
-    
+}
+
+impl Drawable for Ball {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.filled_circle((self.x + self.diameter/2.) as i16, 
                                   (self.y + self.diameter/2.) as i16, 
@@ -170,7 +183,9 @@ impl Paddle {
             speed: speed 
         }
     }
+}
 
+impl Drawable for Paddle {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.set_draw_color(self.color);
         let rect = Rect::new_unwrap(self.x as i32, 
@@ -181,13 +196,29 @@ impl Paddle {
     }
 }
 
+struct GameLoopContext {
+    dt_sec: f32,
+    drawables: Vec<Rc<RefCell<Drawable>>>,
+    audibles: Vec<Rc<RefCell<Music>>>
+}
+
+impl GameLoopContext {
+    fn new(dt_sec: f32) -> GameLoopContext {
+        GameLoopContext {
+            dt_sec: dt_sec,
+            drawables: Vec::new(),
+            audibles: Vec::new()
+        }
+    }
+}
+
 struct Game {
     ui: Ui,
     fps: u32,
-    table: Table,
-    ball: Ball,
-    lpaddle: Paddle,
-    rpaddle: Paddle,
+    table: Rc<RefCell<Table>>,
+    ball: Rc<RefCell<Ball>>,
+    lpaddle: Rc<RefCell<Paddle>>,
+    rpaddle: Rc<RefCell<Paddle>>,
     running: bool
 }
 
@@ -199,10 +230,10 @@ impl Game {
         Game { 
             ui: ui, 
             fps: fps, 
-            table: table,
-            ball: ball, 
-            lpaddle: lpaddle, 
-            rpaddle: rpaddle, 
+            table: Rc::new(RefCell::new(table)),
+            ball: Rc::new(RefCell::new(ball)), 
+            lpaddle: Rc::new(RefCell::new(lpaddle)), 
+            rpaddle: Rc::new(RefCell::new(rpaddle)), 
             running: false 
         }
     }
@@ -213,7 +244,7 @@ impl Game {
         let color = Color::RGB(0xff, 0xff, 0xff);
         let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(self.table.width  as i32 / 2 - 200, 20, 400, 50);
+        let target = Rect::new_unwrap(self.table.borrow().width  as i32 / 2 - 200, 20, 400, 50);
         self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
         self.ui.renderer.clear();
         self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
@@ -228,23 +259,25 @@ impl Game {
         let mut time_last_invocation = clock_ticks::precise_time_ms();
         while self.running {
             let time_this_invocation = clock_ticks::precise_time_ms();
-            let delta_time = time_this_invocation - time_last_invocation;
-            self.update(delta_time as f32 / 1000.); 
-            self.cap_fps(delta_time);
+            let dt_ms = time_this_invocation - time_last_invocation;
+            let mut ctx = GameLoopContext::new(dt_ms as f32/ 1000.);
+            self.update(&mut ctx); 
+            self.cap_fps(dt_ms);
             time_last_invocation = time_this_invocation;
         } 
     }
     
     // Called once per frame. 
-    fn update(&mut self, dt_sec: f32) {
-        self.move_ball(dt_sec);
-        self.move_left_paddle(dt_sec);
-        self.move_right_paddle(dt_sec);
-        self.draw()
+    fn update(&mut self, ctx: &mut GameLoopContext) {
+        ctx.drawables.push(self.table.clone());
+        self.move_ball(ctx);
+        self.move_left_paddle(ctx);
+        self.move_right_paddle(ctx);
+        self.draw(ctx)
     }
     
     // Move the left paddle based on user input. 
-    fn move_left_paddle(&mut self, dt_sec: f32) {
+    fn move_left_paddle(&mut self, ctx: &mut GameLoopContext) {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
@@ -253,8 +286,8 @@ impl Game {
                     }
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
-                        let table = &self.table;
-                        let lpaddle = &mut self.lpaddle;
+                        let table = self.table.borrow();
+                        let mut lpaddle = self.lpaddle.borrow_mut();
                         lpaddle.y = y; 
                         if lpaddle.y < 0. { 
                             lpaddle.y = 0.; 
@@ -268,22 +301,23 @@ impl Game {
             },
             None => {}
         }
+        ctx.drawables.push(self.lpaddle.clone());
     }
 
     // The game moves the right paddle. 
-    fn move_right_paddle(&mut self, dt_sec: f32) {
-        let table = &self.table;
-        let ball = &self.ball;
-        let rpaddle = &mut self.rpaddle;
+    fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
+        let mut table = self.table.borrow_mut();
+        let mut ball = self.ball.borrow_mut();
+        let mut rpaddle = self.rpaddle.borrow_mut(); 
         // Move toward oncoming ball. If the ball is moving away, head for the home position.
         let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { table.height / 2. }; 
         if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
-            rpaddle.y += rpaddle.speed * dt_sec;
+            rpaddle.y += rpaddle.speed * ctx.dt_sec;
             if rpaddle.y > tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
         } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
-            rpaddle.y -= rpaddle.speed * dt_sec;
+            rpaddle.y -= rpaddle.speed * ctx.dt_sec;
             if rpaddle.y + rpaddle.height < tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
@@ -294,18 +328,19 @@ impl Game {
         else if rpaddle.y + rpaddle.height > table.height {
             rpaddle.y = table.height - rpaddle.height; 
         }
+        ctx.drawables.push(self.rpaddle.clone());
     }
         
     // Move the ball and deal with collisions. 
-    fn move_ball(&mut self, dt_sec: f32) {
+    fn move_ball(&mut self, ctx: &mut GameLoopContext) {
 
-        let table = &mut self.table;
-        let ball = &mut self.ball;
-        let lpaddle = &mut self.lpaddle;
-        let rpaddle = &mut self.rpaddle;
+        let mut table = self.table.borrow_mut(); 
+        let mut ball = self.ball.borrow_mut(); 
+        let lpaddle = self.lpaddle.borrow();
+        let rpaddle = self.rpaddle.borrow();
         
-        let mut new_ball_x = ball.x + ball.vx * dt_sec;
-        let mut new_ball_y = ball.y + ball.vy * dt_sec;
+        let mut new_ball_x = ball.x + ball.vx * ctx.dt_sec;
+        let mut new_ball_y = ball.y + ball.vy * ctx.dt_sec;
 
         // Top or bottom wall.
         if new_ball_y < 0. {
@@ -346,7 +381,7 @@ impl Game {
                 // are always the same... instead of using the ratio of the hypotenuses, we can use
                 // the ratio of the opposite sides. In this case, that'd be the ratio of the y
                 // distances travelled:
-                let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
+                let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
                 self.ui.pong_sound.play(1);
@@ -360,7 +395,7 @@ impl Game {
                 let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
                 ball.vx = ball.speed * bounce_angle.cos() * -1.;
                 ball.vy = ball.speed * bounce_angle.sin() * if ball.vy < 0. {-1.} else {1.}; 
-                let bounce_dt_sec = dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
+                let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
                 self.ui.pong_sound.play(1);
@@ -382,13 +417,13 @@ impl Game {
 
         ball.x = new_ball_x;
         ball.y = new_ball_y;
+        ctx.drawables.push(self.ball.clone());
     }
     
-    fn draw(&mut self) {
-        self.table.draw(&mut self.ui);
-        self.ball.draw(&mut self.ui);
-        self.lpaddle.draw(&mut self.ui);
-        self.rpaddle.draw(&mut self.ui);
+    fn draw(&mut self, ctx: &mut GameLoopContext) {
+        for d in ctx.drawables.iter() {
+            d.borrow().draw(&mut self.ui);
+        }
         self.ui.renderer.present();
     }
 
