@@ -302,7 +302,19 @@ impl Game {
                             self.time_slow_motion_started_ms = Some(clock_ticks::precise_time_ms());
                         }
                     },
-                    // Move the left player paddle based on mouse input.
+                    // Move left paddle with mouse scroll wheel. 
+                    Event::MouseWheel{x,y, ..} => {
+                        let y = y as f32;
+                        let table = self.table.borrow();
+                        let mut lpaddle = self.lpaddle.borrow_mut();
+                        lpaddle.y -= y * 5.; 
+                        if lpaddle.y < 0. { 
+                            lpaddle.y = 0.; 
+                        } else if lpaddle.y + lpaddle.height > table.height {
+                            lpaddle.y = table.height - lpaddle.height; 
+                        }
+                    }
+                    // Move left paddle with mouse. 
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
                         let table = self.table.borrow();
@@ -334,13 +346,13 @@ impl Game {
         // very precise and will result in overshoots. Then in the next frame the paddle jumps up
         // to compensate. Using different segments, we stabilize the movement.
         if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
-            rpaddle.y += self.get_modified_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
+            rpaddle.y += self.mod_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
             // Guard against overshooting the ball.
             if rpaddle.y > tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
         } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
-            rpaddle.y -= self.get_modified_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
+            rpaddle.y -= self.mod_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
             // Guard against overshooting the ball.
             if rpaddle.y + rpaddle.height < tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
@@ -361,8 +373,8 @@ impl Game {
         let lpaddle = self.lpaddle.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut();
         
-        let mut new_ball_x = ball.x + self.get_modified_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
-        let mut new_ball_y = ball.y + self.get_modified_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
+        let mut new_ball_x = ball.x + self.mod_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
+        let mut new_ball_y = ball.y + self.mod_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
 
         // Speedup the ball periodically until max speed reached. 
         let time_now_ms = clock_ticks::precise_time_ms();
@@ -473,7 +485,7 @@ impl Game {
         }
     }
 
-    fn get_modified_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
+    fn mod_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
         match self.time_slow_motion_started_ms {
             None => {
                 speed * speed_multiplier
@@ -614,8 +626,8 @@ impl GameBuilder {
 
     fn create_ui(&self) -> Ui {
         let sdl_ctx = sdl2::init().unwrap();
+        sdl_ctx.mouse().set_relative_mouse_mode(true);
         sdl_ctx.mouse().show_cursor(false);
-        //let cursor = sdl2::mouse::Cursor::from_system(sdl2::mouse::SystemCursor::No).unwrap().set(); 
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
                 self.table_width as u32, self.table_height as u32)
@@ -699,12 +711,12 @@ fn main() {
         .with_table_color(0x25, 0x25, 0x25)
         .with_net_color(0xf4, 0xf3, 0xee)
         .with_ball_color(0xff, 0xcc, 0x00)
-        .with_ball_speed_per_sec(500.)
+        .with_ball_speed_per_sec(500.) 
         .with_ball_diameter(11.)
         .with_paddle_offset(4.)
         .with_paddle_width(5.)
         .with_paddle_height(60.)
-        .with_paddle_speed_per_sec(300.)
+        .with_paddle_speed_per_sec(300.) 
         .with_left_paddle_color(0xf6, 0xf4, 0xda)
         .with_right_paddle_color(0xd9, 0xe2, 0xe1)
         .with_max_launch_angle_rads(f32::consts::PI*50./180.)
