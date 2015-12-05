@@ -127,8 +127,8 @@ struct Ball {
     x: f32,                         // x pixel co-ordinate of top left corner
     y: f32,                         // y pixel co-ordinate of top left corner
     diameter: f32,    
-    initial_speed: f32, 
     speed: f32,                     // pixels per second 
+    speed_multiplier: f32,
     vx: f32,                        // pixels per second
     vy: f32,                        // pixels per second
     max_paddle_bounce_angle: f32    // Angle up or down from imaginary horizontal line running 
@@ -143,8 +143,8 @@ impl Ball {
             x: x, 
             y: y, 
             diameter: diameter, 
-            initial_speed: speed,
             speed: speed, 
+            speed_multiplier: 1.0,
             vx: vx, 
             vy: vy,
             max_paddle_bounce_angle: max_paddle_bounce_angle
@@ -166,7 +166,8 @@ struct Paddle {
     y: f32,         // y pixel co-ordinate of top left corner
     width: f32,     
     height: f32,    
-    speed: f32      // pixels per second
+    speed: f32,     // pixels per second
+    speed_multiplier: f32
 }
 
 impl Paddle {
@@ -177,7 +178,8 @@ impl Paddle {
             y: y, 
             width: width, 
             height: height, 
-            speed: speed 
+            speed: speed,
+            speed_multiplier: 1.0,
         }
     }
 }
@@ -215,6 +217,8 @@ struct Game {
     lpaddle: Rc<RefCell<Paddle>>,
     rpaddle: Rc<RefCell<Paddle>>,
     time_ball_last_speedup_ms: Option<u64>,
+    slow_motions_remaining: u32,
+    time_slow_motion_started_ms: Option<u64>,
     running: bool
 }
 
@@ -231,6 +235,8 @@ impl Game {
             lpaddle: Rc::new(RefCell::new(lpaddle)), 
             rpaddle: Rc::new(RefCell::new(rpaddle)), 
             time_ball_last_speedup_ms: Option::None,
+            slow_motions_remaining: 3,
+            time_slow_motion_started_ms: Option::None,
             running: false 
         }
     }
@@ -272,6 +278,11 @@ impl Game {
         self.move_right_paddle(ctx);
         self.draw(ctx);
         self.play_audio(ctx);
+        if let Some(time_slow_motion_started_ms) = self.time_slow_motion_started_ms {
+            if clock_ticks::precise_time_ms() - time_slow_motion_started_ms >= 5000 {
+                self.time_slow_motion_started_ms = None;
+            }
+        }
     }
     
     // Move the left paddle based on user input. 
@@ -279,9 +290,19 @@ impl Game {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
+                    // Quit the game.
                     Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         self.running = false;
-                    }
+                    },
+                    // Enter slow motion mode.
+                    Event::MouseButtonDown{..} => {
+                        if self.slow_motions_remaining > 0 && 
+                            self.time_slow_motion_started_ms.is_none() {
+                            self.slow_motions_remaining -= 1;
+                            self.time_slow_motion_started_ms = Some(clock_ticks::precise_time_ms());
+                        }
+                    },
+                    // Move the left player paddle based on mouse input.
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
                         let table = self.table.borrow();
@@ -303,7 +324,7 @@ impl Game {
 
     // The game moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
-        let mut table = self.table.borrow_mut();
+        let table = self.table.borrow();
         let mut ball = self.ball.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut(); 
         // Move toward oncoming ball. If the ball is moving away, head for the home position.
@@ -313,13 +334,13 @@ impl Game {
         // very precise and will result in overshoots. Then in the next frame the paddle jumps up
         // to compensate. Using different segments, we stabilize the movement.
         if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
-            rpaddle.y += rpaddle.speed * ctx.dt_sec;
+            rpaddle.y += self.get_modified_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
             // Guard against overshooting the ball.
             if rpaddle.y > tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
         } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
-            rpaddle.y -= rpaddle.speed * ctx.dt_sec;
+            rpaddle.y -= self.get_modified_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
             // Guard against overshooting the ball.
             if rpaddle.y + rpaddle.height < tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
@@ -340,12 +361,23 @@ impl Game {
         let lpaddle = self.lpaddle.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut();
         
-        let mut new_ball_x = ball.x + ball.vx * ctx.dt_sec;
-        let mut new_ball_y = ball.y + ball.vy * ctx.dt_sec;
+        let mut new_ball_x = ball.x + self.get_modified_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
+        let mut new_ball_y = ball.y + self.get_modified_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
 
-        // Ball has not received a speedup. Start the timer.
-        if let None = self.time_ball_last_speedup_ms {
-            self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
+        // Speedup the ball periodically until max speed reached. 
+        let time_now_ms = clock_ticks::precise_time_ms();
+        match self.time_ball_last_speedup_ms {
+            None => {   
+                self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
+            },
+            Some(time_ball_last_speedup_ms) => {
+                if time_now_ms - time_ball_last_speedup_ms > 15000 && 
+                    ball.speed_multiplier < 2. && self.time_slow_motion_started_ms.is_none() {
+                    ball.speed_multiplier += 0.1;
+                    rpaddle.speed_multiplier += 0.1;
+                    self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
+                }
+            }
         }
 
         // Top or bottom wall.
@@ -390,17 +422,6 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                // There hasn't been a speedup for a while. This could get boring, let's fasten
-                // the pace of the game...
-                if let Some(time_ball_last_speedup_ms) = self.time_ball_last_speedup_ms {
-                    let time_now_ms = clock_ticks::precise_time_ms();
-                    if ball.speed < ball.initial_speed * 1.5 && 
-                        time_now_ms - time_ball_last_speedup_ms > 20000 {
-                        ball.speed *= 1.1;
-                        rpaddle.speed *= 1.15;
-                        self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
-                    }
-                }
                 ctx.audibles.push(self.ui.pong_sound.clone()); 
             }
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
@@ -425,29 +446,12 @@ impl Game {
             ball.vx = -ball.vx;
             // Right player scored.
             table.rscore += 1;    
-            if table.rscore > table.lscore {
-                if ball.speed > ball.initial_speed * 1.5 {
-                    ball.speed *= 0.8; 
-                    self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
-                }
-            } else {
-                rpaddle.speed *= 0.8;
-            }
             ctx.audibles.push(self.ui.ping_sound.clone()); 
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
             table.lscore += 1;    
-            // Speedup the game if the right player is leading.
-            if table.rscore >= table.lscore { 
-                if ball.speed < ball.initial_speed * 2. { 
-                    ball.speed *= 1.2;
-                    self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
-                }
-            } else {
-                rpaddle.speed *= 1.2;
-            } 
             ctx.audibles.push(self.ui.ping_sound.clone()); 
         } 
 
@@ -467,7 +471,17 @@ impl Game {
         for a in ctx.audibles.iter() {
             a.play(1);
         }
+    }
 
+    fn get_modified_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
+        match self.time_slow_motion_started_ms {
+            None => {
+                speed * speed_multiplier
+            },
+            Some(time_slow_motion_started_ms) => {
+                speed * speed_multiplier * 0.5
+            }
+        }
     }
 
     // Ensure we run no faster than the desired fps by introducing
