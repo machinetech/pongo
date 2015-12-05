@@ -9,7 +9,7 @@ use rand::distributions::{IndependentSample, Range};
 
 use sdl2::{AudioSubsystem, Sdl};
 use sdl2::event::Event;
-use sdl2::keyboard::{Keycode, Scancode};
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
@@ -18,7 +18,6 @@ use std::cell::RefCell;
 use std::f32;
 use std::path::Path;
 use std::rc::Rc;
-use std::string::String;
 use std::thread;
 use std::vec::Vec;
 
@@ -32,8 +31,8 @@ struct Ui {
     ttf_ctx: Sdl2TtfContext,
     font: Font,
     sdl_audio: AudioSubsystem, 
-    ping_sound: Music,
-    pong_sound: Music
+    ping_sound: Rc<Music>,
+    pong_sound: Rc<Music>
 }
 
 impl Ui {
@@ -45,8 +44,8 @@ impl Ui {
             ttf_ctx: ttf_ctx,
             font: font,
             sdl_audio: sdl_audio,
-            ping_sound: ping_sound,
-            pong_sound: pong_sound
+            ping_sound: Rc::new(ping_sound),
+            pong_sound: Rc::new(pong_sound)
         }  
     } 
 
@@ -104,10 +103,8 @@ impl Table {
             let net_dot_x = self.width / 2. - net_dot_width / 2.;
             let net_dot_y = i as f32 * net_dot_height; 
             ui.renderer.set_draw_color(if i % 2 == 0 {self.net_color} else {self.color});
-            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, 
-                                        net_dot_y as i32, 
-                                        net_dot_width as u32,
-                                        net_dot_height as u32);
+            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, net_dot_y as i32, 
+                                                net_dot_width as u32, net_dot_height as u32);
             ui.renderer.fill_rect(net_dot_rect);
         }
     }
@@ -118,7 +115,6 @@ impl Drawable for Table {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.set_draw_color(self.color);
         ui.renderer.clear();
-       
         self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
         self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
         self.draw_net(ui);
@@ -131,6 +127,7 @@ struct Ball {
     x: f32,                         // x pixel co-ordinate of top left corner
     y: f32,                         // y pixel co-ordinate of top left corner
     diameter: f32,    
+    initial_speed: f32, 
     speed: f32,                     // pixels per second 
     vx: f32,                        // pixels per second
     vy: f32,                        // pixels per second
@@ -146,6 +143,7 @@ impl Ball {
             x: x, 
             y: y, 
             diameter: diameter, 
+            initial_speed: speed,
             speed: speed, 
             vx: vx, 
             vy: vy,
@@ -158,8 +156,7 @@ impl Drawable for Ball {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.filled_circle((self.x + self.diameter/2.) as i16, 
                                   (self.y + self.diameter/2.) as i16, 
-                                  (self.diameter/2.) as i16, 
-                                  self.color);
+                                  (self.diameter/2.) as i16, self.color);
     }
 }
 
@@ -169,7 +166,7 @@ struct Paddle {
     y: f32,         // y pixel co-ordinate of top left corner
     width: f32,     
     height: f32,    
-    speed: f32     // pixels per second
+    speed: f32      // pixels per second
 }
 
 impl Paddle {
@@ -188,9 +185,7 @@ impl Paddle {
 impl Drawable for Paddle {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.set_draw_color(self.color);
-        let rect = Rect::new_unwrap(self.x as i32, 
-                                    self.y as i32, 
-                                    self.width as u32,
+        let rect = Rect::new_unwrap(self.x as i32, self.y as i32, self.width as u32, 
                                     self.height as u32);
         ui.renderer.fill_rect(rect);
     }
@@ -199,7 +194,7 @@ impl Drawable for Paddle {
 struct GameLoopContext {
     dt_sec: f32,
     drawables: Vec<Rc<RefCell<Drawable>>>,
-    audibles: Vec<Rc<RefCell<Music>>>
+    audibles: Vec<Rc<Music>>
 }
 
 impl GameLoopContext {
@@ -219,6 +214,7 @@ struct Game {
     ball: Rc<RefCell<Ball>>,
     lpaddle: Rc<RefCell<Paddle>>,
     rpaddle: Rc<RefCell<Paddle>>,
+    time_ball_last_speedup_ms: Option<u64>,
     running: bool
 }
 
@@ -234,6 +230,7 @@ impl Game {
             ball: Rc::new(RefCell::new(ball)), 
             lpaddle: Rc::new(RefCell::new(lpaddle)), 
             rpaddle: Rc::new(RefCell::new(rpaddle)), 
+            time_ball_last_speedup_ms: Option::None,
             running: false 
         }
     }
@@ -273,7 +270,8 @@ impl Game {
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
-        self.draw(ctx)
+        self.draw(ctx);
+        self.play_audio(ctx);
     }
     
     // Move the left paddle based on user input. 
@@ -291,8 +289,7 @@ impl Game {
                         lpaddle.y = y; 
                         if lpaddle.y < 0. { 
                             lpaddle.y = 0.; 
-                        }
-                        else if lpaddle.y + lpaddle.height > table.height {
+                        } else if lpaddle.y + lpaddle.height > table.height {
                             lpaddle.y = table.height - lpaddle.height; 
                         }
                     }
@@ -307,25 +304,30 @@ impl Game {
     // The game moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
         let mut table = self.table.borrow_mut();
-        let mut ball = self.ball.borrow_mut();
+        let mut ball = self.ball.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut(); 
         // Move toward oncoming ball. If the ball is moving away, head for the home position.
         let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { table.height / 2. }; 
+        // We use non-overlapping segments of the paddle (3/4 vs 1/4) when deciding whether to move
+        // the paddle up or down. Using the center of the paddle against the center of the ball is
+        // very precise and will result in overshoots. Then in the next frame the paddle jumps up
+        // to compensate. Using different segments, we stabilize the movement.
         if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
             rpaddle.y += rpaddle.speed * ctx.dt_sec;
+            // Guard against overshooting the ball.
             if rpaddle.y > tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
         } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
             rpaddle.y -= rpaddle.speed * ctx.dt_sec;
+            // Guard against overshooting the ball.
             if rpaddle.y + rpaddle.height < tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
         }
         if rpaddle.y < 0. { 
             rpaddle.y = 0.; 
-        }
-        else if rpaddle.y + rpaddle.height > table.height {
+        } else if rpaddle.y + rpaddle.height > table.height {
             rpaddle.y = table.height - rpaddle.height; 
         }
         ctx.drawables.push(self.rpaddle.clone());
@@ -333,24 +335,28 @@ impl Game {
         
     // Move the ball and deal with collisions. 
     fn move_ball(&mut self, ctx: &mut GameLoopContext) {
-
         let mut table = self.table.borrow_mut(); 
         let mut ball = self.ball.borrow_mut(); 
         let lpaddle = self.lpaddle.borrow();
-        let rpaddle = self.rpaddle.borrow();
+        let mut rpaddle = self.rpaddle.borrow_mut();
         
         let mut new_ball_x = ball.x + ball.vx * ctx.dt_sec;
         let mut new_ball_y = ball.y + ball.vy * ctx.dt_sec;
+
+        // Ball has not received a speedup. Start the timer.
+        if let None = self.time_ball_last_speedup_ms {
+            self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
+        }
 
         // Top or bottom wall.
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
-            self.ui.ping_sound.play(1);
+            ctx.audibles.push(self.ui.ping_sound.clone());
         } else if new_ball_y + ball.diameter >= table.height { 
             new_ball_y = table.height - (new_ball_y + ball.diameter - table.height) - ball.diameter;
             ball.vy = -ball.vy;
-            self.ui.ping_sound.play(1);
+            ctx.audibles.push(self.ui.ping_sound.clone());
         } 
 
         // Left or right paddle.
@@ -384,7 +390,18 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                self.ui.pong_sound.play(1);
+                // There hasn't been a speedup for a while. This could get boring, let's fasten
+                // the pace of the game...
+                if let Some(time_ball_last_speedup_ms) = self.time_ball_last_speedup_ms {
+                    let time_now_ms = clock_ticks::precise_time_ms();
+                    if ball.speed < ball.initial_speed * 1.5 && 
+                        time_now_ms - time_ball_last_speedup_ms > 20000 {
+                        ball.speed *= 1.1;
+                        rpaddle.speed *= 1.15;
+                        self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
+                    }
+                }
+                ctx.audibles.push(self.ui.pong_sound.clone()); 
             }
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
             let bounce_x = rpaddle.x - ball.diameter; 
@@ -398,7 +415,7 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                self.ui.pong_sound.play(1);
+                ctx.audibles.push(self.ui.ping_sound.clone()); 
             }
         } 
 
@@ -406,13 +423,32 @@ impl Game {
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
+            // Right player scored.
             table.rscore += 1;    
-            self.ui.ping_sound.play(1);
+            if table.rscore > table.lscore {
+                if ball.speed > ball.initial_speed * 1.5 {
+                    ball.speed *= 0.8; 
+                    self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
+                }
+            } else {
+                rpaddle.speed *= 0.8;
+            }
+            ctx.audibles.push(self.ui.ping_sound.clone()); 
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
+            // Left player scored.
             table.lscore += 1;    
-            self.ui.ping_sound.play(1);
+            // Speedup the game if the right player is leading.
+            if table.rscore >= table.lscore { 
+                if ball.speed < ball.initial_speed * 2. { 
+                    ball.speed *= 1.2;
+                    self.time_ball_last_speedup_ms = Option::Some(clock_ticks::precise_time_ms());
+                }
+            } else {
+                rpaddle.speed *= 1.2;
+            } 
+            ctx.audibles.push(self.ui.ping_sound.clone()); 
         } 
 
         ball.x = new_ball_x;
@@ -425,6 +461,13 @@ impl Game {
             d.borrow().draw(&mut self.ui);
         }
         self.ui.renderer.present();
+    }
+
+    fn play_audio(&mut self, ctx: &mut GameLoopContext) {
+        for a in ctx.audibles.iter() {
+            a.play(1);
+        }
+
     }
 
     // Ensure we run no faster than the desired fps by introducing
