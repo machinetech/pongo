@@ -242,7 +242,7 @@ impl Game {
     }
     
     /// Display welcome screen
-    fn show_welcome_screen(&mut self) {
+    fn show_welcome_screen(&mut self) -> bool {
         self.ui.poll_event();
         let color = Color::RGB(0xff, 0xff, 0xff);
         let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(color)).unwrap();
@@ -253,7 +253,27 @@ impl Game {
         self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
         self.ui.renderer.copy(&texture, None, Some(target));
         self.ui.renderer.present();
-        thread::sleep_ms(2000);
+        let mut start_game: Option<bool> = Option::None;
+        while start_game.is_none() {
+            thread::sleep_ms(100);
+            match self.ui.poll_event() {
+                Some(event) => {
+                    match event {
+                        // Quit
+                        Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                           start_game = Option::Some(false); 
+                        },
+                        // Press any other key to start the game 
+                        Event::KeyDown { keycode: Some(..), .. } => {
+                           start_game = Option::Some(true); 
+                        },
+                        _ => {}
+                    }
+                },
+                None => {}
+            }
+        }
+        return start_game.unwrap();
     }
 
     /// Start the game and block until finished. 
@@ -714,23 +734,27 @@ impl GameBuilder {
 }
 
 fn main() {
-    let mut game = GameBuilder::new()
-        .with_table_dimensions(800., 600.)
-        .with_table_color(0x25, 0x25, 0x25)
-        .with_net_color(0xf4, 0xf3, 0xee)
-        .with_ball_color(0xff, 0xcc, 0x00)
-        .with_ball_speed_per_sec(500.) 
-        .with_ball_diameter(11.)
-        .with_paddle_offset(4.)
-        .with_paddle_width(5.)
-        .with_paddle_height(60.)
-        .with_paddle_speed_per_sec(300.) 
-        .with_left_paddle_color(0xf6, 0xf4, 0xda)
-        .with_right_paddle_color(0xd9, 0xe2, 0xe1)
-        .with_max_launch_angle_rads(f32::consts::PI*50./180.)
-        .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
-        .with_fps(40)
-        .build();
-    game.show_welcome_screen();
-    game.start();
+    while true {
+        let mut game = GameBuilder::new()
+            .with_table_dimensions(800., 600.)
+            .with_table_color(0x25, 0x25, 0x25)
+            .with_net_color(0xf4, 0xf3, 0xee)
+            .with_ball_color(0xff, 0xcc, 0x00)
+            .with_ball_speed_per_sec(500.) 
+            .with_ball_diameter(11.)
+            .with_paddle_offset(4.)
+            .with_paddle_width(5.)
+            .with_paddle_height(60.)
+            .with_paddle_speed_per_sec(300.) 
+            .with_left_paddle_color(0xf6, 0xf4, 0xda)
+            .with_right_paddle_color(0xd9, 0xe2, 0xe1)
+            .with_max_launch_angle_rads(f32::consts::PI*50./180.)
+            .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
+            .with_fps(40)
+            .build();
+        if !game.show_welcome_screen() {
+            return
+        }
+        game.start();
+    }
 }
