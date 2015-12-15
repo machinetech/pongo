@@ -376,22 +376,6 @@ impl Game {
         let mut new_ball_x = ball.x + self.mod_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
         let mut new_ball_y = ball.y + self.mod_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
 
-        // Speedup the ball periodically until max speed reached. 
-        let time_now_ms = clock_ticks::precise_time_ms();
-        match self.time_ball_last_speedup_ms {
-            None => {   
-                self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
-            },
-            Some(time_ball_last_speedup_ms) => {
-                if time_now_ms - time_ball_last_speedup_ms > 15000 && 
-                    ball.speed_multiplier < 2. && self.time_slow_motion_started_ms.is_none() {
-                    ball.speed_multiplier += 0.1;
-                    rpaddle.speed_multiplier += 0.1;
-                    self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
-                }
-            }
-        }
-
         // Top or bottom wall.
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
@@ -402,6 +386,8 @@ impl Game {
             ball.vy = -ball.vy;
             ctx.audibles.push(self.ui.ping_sound.clone());
         } 
+
+        let mut bounce_that_allows_speedup: bool = false;
 
         // Left or right paddle.
         if new_ball_x < lpaddle.x + lpaddle.width && ball.x >= lpaddle.x + lpaddle.width {
@@ -435,6 +421,7 @@ impl Game {
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
                 ctx.audibles.push(self.ui.pong_sound.clone()); 
+                bounce_that_allows_speedup = true;
             }
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
             let bounce_x = rpaddle.x - ball.diameter; 
@@ -449,6 +436,7 @@ impl Game {
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
                 ctx.audibles.push(self.ui.ping_sound.clone()); 
+                bounce_that_allows_speedup = true;
             }
         } 
 
@@ -459,17 +447,37 @@ impl Game {
             // Right player scored.
             table.rscore += 1;    
             ctx.audibles.push(self.ui.ping_sound.clone()); 
+            bounce_that_allows_speedup = true;
         } else if new_ball_x + ball.diameter > table.width { 
             new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
             table.lscore += 1;    
             ctx.audibles.push(self.ui.ping_sound.clone()); 
+            bounce_that_allows_speedup = true;
         } 
 
         ball.x = new_ball_x;
         ball.y = new_ball_y;
         ctx.drawables.push(self.ball.clone());
+
+        // Speedup the ball periodically until max speed reached. 
+        let time_now_ms = clock_ticks::precise_time_ms();
+        match self.time_ball_last_speedup_ms {
+            None => {   
+                self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
+            },
+            Some(time_ball_last_speedup_ms) => {
+                if time_now_ms - time_ball_last_speedup_ms > 15000 && 
+                    bounce_that_allows_speedup &&
+                    ball.speed_multiplier < 1.5 && self.time_slow_motion_started_ms.is_none() {
+                    ball.speed_multiplier += 0.1;
+                    rpaddle.speed_multiplier += 0.1;
+                    self.time_ball_last_speedup_ms = Option::Some(time_now_ms);
+                }
+            }
+        }
+
     }
     
     fn draw(&mut self, ctx: &mut GameLoopContext) {
@@ -626,8 +634,8 @@ impl GameBuilder {
 
     fn create_ui(&self) -> Ui {
         let sdl_ctx = sdl2::init().unwrap();
-        sdl_ctx.mouse().set_relative_mouse_mode(true);
-        sdl_ctx.mouse().show_cursor(false);
+        //sdl_ctx.mouse().set_relative_mouse_mode(true);
+        //sdl_ctx.mouse().show_cursor(false);
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
                 self.table_width as u32, self.table_height as u32)
