@@ -305,6 +305,10 @@ impl Game {
             running: false, 
             resettables: Vec::new()
         };
+        game.resettables.push(game.table.clone());
+        game.resettables.push(game.ball.clone());
+        game.resettables.push(game.lpaddle.clone());
+        game.resettables.push(game.rpaddle.clone());
         game.reset();
         game
 
