@@ -59,6 +59,10 @@ trait Drawable {
     fn draw(&self, ui: &mut Ui); 
 }
 
+trait Resettable {
+    fn reset(&mut self);
+}
+
 struct Table {
     color: Color,
     width: f32,
@@ -73,7 +77,7 @@ struct Table {
 impl Table {
     fn new(color: Color, width: f32, height: f32, net_color: Color, 
            lscore_color: Color, rscore_color: Color) -> Table {
-        Table {
+        let mut table = Table {
             color: color,
             width: width,
             height: height,
@@ -82,7 +86,9 @@ impl Table {
             rscore: 0,
             lscore_color: lscore_color,
             rscore_color: rscore_color
-        }
+        };
+        table.reset();
+        table
     }
 
     fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
@@ -108,6 +114,14 @@ impl Table {
             ui.renderer.fill_rect(net_dot_rect);
         }
     }
+
+}
+
+impl Resettable for Table {
+    fn reset(&mut self) {
+        self.lscore = 0;
+        self.rscore = 0;
+    }
 }
 
 impl Drawable for Table {
@@ -124,6 +138,8 @@ impl Drawable for Table {
 
 struct Ball {
     color: Color,
+    initial_x: f32,
+    initial_y: f32,
     x: f32,                         // x pixel co-ordinate of top left corner
     y: f32,                         // y pixel co-ordinate of top left corner
     diameter: f32,    
@@ -131,24 +147,57 @@ struct Ball {
     speed_multiplier: f32,
     vx: f32,                        // pixels per second
     vy: f32,                        // pixels per second
-    max_paddle_bounce_angle: f32    // Angle up or down from imaginary horizontal line running 
+    max_launch_angle: f32, 
+    max_bounce_angle: f32           // Angle up or down from imaginary horizontal line running 
                                     // perpendicular to the paddle. 
 }
 
 impl Ball {
-    fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, vx: f32, 
-               vy: f32, max_paddle_bounce_angle: f32) -> Ball {
-        Ball { 
+    fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, max_launch_angle: f32, 
+           max_bounce_angle: f32) -> Ball {
+        let mut ball = Ball { 
             color: color, 
+            initial_x: x, 
+            initial_y: y, 
             x: x, 
             y: y, 
             diameter: diameter, 
             speed: speed, 
-            speed_multiplier: 1.0,
-            vx: vx, 
-            vy: vy,
-            max_paddle_bounce_angle: max_paddle_bounce_angle
-        }
+            speed_multiplier: 1.0, 
+            vx: 0., 
+            vy: 0., 
+            max_launch_angle: max_launch_angle, 
+            max_bounce_angle: max_bounce_angle 
+        };
+        ball.reset();
+        ball
+    }
+}
+
+impl Resettable for Ball {
+
+    fn reset(&mut self) {
+        self.x = self.initial_x;
+        self.y = self.initial_y;
+
+        let mut rng = rand::thread_rng();
+
+        let launch_angle = Range::new(0., self.max_launch_angle).ind_sample(&mut rng);
+        let dir = [-1., 1.];
+
+        // Use the sine of the angle to determine the vertical speed. Then, 
+        // choose a direction (up or down) to select a vertical velocity.
+        let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+        let vy = launch_angle.sin() * self.speed * up_or_down; 
+        let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
+        
+        // Use Pythagoras to determine the horizontal speed. Then, choose a
+        // direction (left or right) to select a horizontal velocity.
+        let vx = ((self.speed * self.speed) - (vy * vy)).sqrt() * left_or_right;
+
+        self.vx = vx;
+        self.vy = vy;
+        self.speed_multiplier = 1.;
     }
 }
 
@@ -162,6 +211,8 @@ impl Drawable for Ball {
 
 struct Paddle {
     color: Color,
+    initial_x: f32,
+    initial_y: f32,
     x: f32,         // x pixel co-ordinate of top left corner
     y: f32,         // y pixel co-ordinate of top left corner
     width: f32,     
@@ -172,15 +223,28 @@ struct Paddle {
 
 impl Paddle {
     fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32) -> Paddle {
-        Paddle { 
+        let mut paddle = Paddle { 
             color: color,
+            initial_x: x, 
+            initial_y: y, 
             x: x, 
             y: y, 
             width: width, 
             height: height, 
             speed: speed,
             speed_multiplier: 1.0,
-        }
+        };
+        paddle.reset();
+        paddle
+    }
+
+}
+
+impl Resettable for Paddle {
+    fn reset(&mut self) {
+        self.x = self.initial_x;
+        self.y = self.initial_y;
+        self.speed_multiplier = 1.;
     }
 }
 
@@ -219,7 +283,8 @@ struct Game {
     time_ball_last_speedup_ms: Option<u64>,
     slow_motions_remaining: u32,
     time_slow_motion_started_ms: Option<u64>,
-    running: bool
+    running: bool,
+    resettables: Vec<Rc<RefCell<Resettable>>>
 }
 
 impl Game {
@@ -227,7 +292,7 @@ impl Game {
     /// Create initial game state. 
     fn new(ui: Ui, fps: u32, table: Table, ball: Ball, lpaddle: Paddle, 
            rpaddle: Paddle) -> Game { 
-        Game { 
+        let mut game = Game { 
             ui: ui, 
             fps: fps, 
             table: Rc::new(RefCell::new(table)),
@@ -237,8 +302,12 @@ impl Game {
             time_ball_last_speedup_ms: Option::None,
             slow_motions_remaining: 3,
             time_slow_motion_started_ms: Option::None,
-            running: false 
-        }
+            running: false, 
+            resettables: Vec::new()
+        };
+        game.reset();
+        game
+
     }
     
     /// Display welcome screen
@@ -422,7 +491,7 @@ impl Game {
                 // Use the ratio of the bounce position to half the height of the paddle as an
                 // angle multiplier.
                 let bounce_angle_multiplier = (relative_y / (lpaddle.height / 2.)).abs();
-                let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
+                let bounce_angle = bounce_angle_multiplier * ball.max_bounce_angle;
                 // Calculate completely new x and y velocities using simple trigonometric
                 // identities.
                 ball.vx = ball.speed * bounce_angle.cos();
@@ -449,7 +518,7 @@ impl Game {
             if bounce_y + ball.diameter  >= rpaddle.y && bounce_y <= rpaddle.y + rpaddle.height {
                 let relative_y = (rpaddle.y + rpaddle.height / 2.) - (bounce_y + ball.diameter / 2.);
                 let bounce_angle_multiplier = (relative_y / (rpaddle.height / 2.)).abs();
-                let bounce_angle = bounce_angle_multiplier * ball.max_paddle_bounce_angle;
+                let bounce_angle = bounce_angle_multiplier * ball.max_bounce_angle;
                 ball.vx = ball.speed * bounce_angle.cos() * -1.;
                 ball.vy = ball.speed * bounce_angle.sin() * if ball.vy < 0. {-1.} else {1.}; 
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
@@ -532,6 +601,18 @@ impl Game {
             thread::sleep_ms((max_ms - took_ms) as u32);
         }
     }
+    
+}
+
+impl Resettable for Game {
+    fn reset(&mut self) {
+        self.time_ball_last_speedup_ms = Option::None;
+        self.slow_motions_remaining = 3;
+        self.time_slow_motion_started_ms = Option::None;
+        for r in self.resettables.iter() {
+            r.borrow_mut().reset();
+        }
+    } 
 }
 
 struct GameBuilder {
@@ -682,27 +763,8 @@ impl GameBuilder {
 
     fn create_ball(&self) -> Ball {
         
-        // Place ball at center of screen. 
-        let diameter = self.ball_diameter;
-        let x = self.table_width/2.;
-        let y = self.table_height/2.;
-
-        let speed = self.ball_speed;
-        let mut rng = rand::thread_rng();
-
-        let launch_angle = Range::new(0., self.max_launch_angle).ind_sample(&mut rng);
-        let dir = [-1., 1.];
-
-        // Use the sine of the angle to determine the vertical speed. Then, 
-        // choose a direction (up or down) to select a vertical velocity.
-        let up_or_down = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-        let vy = launch_angle.sin() * speed * up_or_down; 
-        let left_or_right = rand::sample(&mut rng, dir.into_iter(),1)[0]; 
-        
-        // Use Pythagoras to determine the horizontal speed. Then, choose a
-        // direction (left or right) to select a horizontal velocity.
-        let vx = ((speed * speed) - (vy * vy)).sqrt() * left_or_right;
-        Ball::new(self.ball_color, x, y, diameter, speed, vx, vy, self.max_bounce_angle)
+        Ball::new(self.ball_color, self.table_width/2., self.table_height/2., self.ball_diameter,
+                  self.ball_speed, self.max_launch_angle, self.max_bounce_angle)
     }    
 
     fn create_left_paddle(&self) -> Paddle {
@@ -734,27 +796,28 @@ impl GameBuilder {
 }
 
 fn main() {
+    let mut game = GameBuilder::new()
+        .with_table_dimensions(800., 600.)
+        .with_table_color(0x25, 0x25, 0x25)
+        .with_net_color(0xf4, 0xf3, 0xee)
+        .with_ball_color(0xff, 0xcc, 0x00)
+        .with_ball_speed_per_sec(500.) 
+        .with_ball_diameter(11.)
+        .with_paddle_offset(4.)
+        .with_paddle_width(5.)
+        .with_paddle_height(60.)
+        .with_paddle_speed_per_sec(300.) 
+        .with_left_paddle_color(0xf6, 0xf4, 0xda)
+        .with_right_paddle_color(0xd9, 0xe2, 0xe1)
+        .with_max_launch_angle_rads(f32::consts::PI*50./180.)
+        .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
+        .with_fps(40)
+        .build();
     while true {
-        let mut game = GameBuilder::new()
-            .with_table_dimensions(800., 600.)
-            .with_table_color(0x25, 0x25, 0x25)
-            .with_net_color(0xf4, 0xf3, 0xee)
-            .with_ball_color(0xff, 0xcc, 0x00)
-            .with_ball_speed_per_sec(500.) 
-            .with_ball_diameter(11.)
-            .with_paddle_offset(4.)
-            .with_paddle_width(5.)
-            .with_paddle_height(60.)
-            .with_paddle_speed_per_sec(300.) 
-            .with_left_paddle_color(0xf6, 0xf4, 0xda)
-            .with_right_paddle_color(0xd9, 0xe2, 0xe1)
-            .with_max_launch_angle_rads(f32::consts::PI*50./180.)
-            .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
-            .with_fps(40)
-            .build();
         if !game.show_welcome_screen() {
             return
         }
         game.start();
+        game.reset();
     }
 }
