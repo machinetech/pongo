@@ -376,6 +376,7 @@ impl Game {
                 self.time_slow_motion_started_ms = None;
             }
         }
+        self.check_for_win(ctx);
     }
     
     // Move the left paddle based on user input. 
@@ -584,6 +585,35 @@ impl Game {
         for a in ctx.audibles.iter() {
             a.play(1);
         }
+    }
+
+    fn check_for_win(&mut self, ctx: &mut GameLoopContext) {
+        let mut msg: Option<&str> = Option::None;
+        let points_to_win = 1;
+        if self.table.borrow().lscore >= points_to_win {
+            msg = Option::Some("You win!");
+        } else if self.table.borrow().rscore >= points_to_win {
+            msg = Option::Some("Computer wins!");
+        }
+        if let Some(msg) = msg {
+            self.running = false;
+            self.show_msg(msg);
+        }
+    }
+
+    fn show_msg(&mut self, msg: &str) {
+        let color = Color::RGB(0xff, 0xff, 0xff);
+        let surface = self.ui.font.render(msg, sdl2_ttf::blended(color)).unwrap();
+        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let x = self.table.borrow().width /2. /2.;
+        let y = self.table.borrow().height /2. - 100.;
+        let target = Rect::new_unwrap(x as i32, y as i32, 
+                                      (self.table.borrow().width/2.) as u32, 60);
+        self.ui.renderer.set_draw_color(self.table.borrow().color);
+        self.ui.renderer.clear();
+        self.ui.renderer.copy(&texture, None, Some(target));
+        self.ui.renderer.present();
+        thread::sleep_ms(5000);
     }
 
     fn mod_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
