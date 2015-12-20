@@ -317,14 +317,17 @@ impl Game {
     /// Display welcome screen
     fn show_welcome_screen(&mut self) -> bool {
         self.ui.poll_event();
-        let color = Color::RGB(0xff, 0xff, 0xff);
-        let surface = self.ui.font.render("Get Ready Player 1!", sdl2_ttf::blended(color)).unwrap();
-        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(self.table.borrow().width  as i32 / 2 - 200, 20, 400, 50);
-        self.ui.renderer.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        self.ui.renderer.set_draw_color(self.table.borrow().color);
         self.ui.renderer.clear();
-        self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
-        self.ui.renderer.copy(&texture, None, Some(target));
+        let table_width = self.table.borrow().width;
+        self.show_msg("Pong", table_width / 4., 100., table_width / 2., 150., 
+                      Color::RGB(0xff, 0xff, 0xff));
+        self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
+                      18., Color::RGB(0xff, 0xff, 0xff));
+        self.show_msg("Click the mouse to slow down time", table_width / 4., 330., table_width / 2., 
+                      18., Color::RGB(0xff, 0xff, 0xff));
+        self.show_msg("Press any key to start!", table_width / 4., 400., table_width / 2., 
+                      50., Color::RGB(0xff, 0xff, 0xff));
         self.ui.renderer.present();
         let mut start_game: Option<bool> = Option::None;
         while start_game.is_none() {
@@ -336,8 +339,8 @@ impl Game {
                         Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                            start_game = Option::Some(false); 
                         },
-                        // Press any other key to start the game 
-                        Event::KeyDown { keycode: Some(..), .. } => {
+                        // Press any other key or click the mouse to start the game 
+                        Event::KeyDown { keycode: Some(..), .. } | Event::MouseButtonDown{..} => {
                            start_game = Option::Some(true); 
                         },
                         _ => {}
@@ -589,31 +592,33 @@ impl Game {
 
     fn check_for_win(&mut self, ctx: &mut GameLoopContext) {
         let mut msg: Option<&str> = Option::None;
-        let points_to_win = 1;
+        let points_to_win = 5;
         if self.table.borrow().lscore >= points_to_win {
             msg = Option::Some("You win!");
         } else if self.table.borrow().rscore >= points_to_win {
             msg = Option::Some("Computer wins!");
         }
+        // We have a winner.
         if let Some(msg) = msg {
             self.running = false;
-            self.show_msg(msg);
+            self.ui.renderer.set_draw_color(self.table.borrow().color);
+            self.ui.renderer.clear();
+            let x = self.table.borrow().width /2. /2.;
+            let y = self.table.borrow().height /2. - 100.;
+            let color = Color::RGB(0xff, 0xff, 0xff);
+            let width = self.table.borrow().width / 2.;
+            let height = 60.;
+            self.show_msg(msg, x, y, width, height, color);
+            self.ui.renderer.present();
+            thread::sleep_ms(5000);
         }
     }
 
-    fn show_msg(&mut self, msg: &str) {
-        let color = Color::RGB(0xff, 0xff, 0xff);
+    fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color) {
         let surface = self.ui.font.render(msg, sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let x = self.table.borrow().width /2. /2.;
-        let y = self.table.borrow().height /2. - 100.;
-        let target = Rect::new_unwrap(x as i32, y as i32, 
-                                      (self.table.borrow().width/2.) as u32, 60);
-        self.ui.renderer.set_draw_color(self.table.borrow().color);
-        self.ui.renderer.clear();
+        let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
         self.ui.renderer.copy(&texture, None, Some(target));
-        self.ui.renderer.present();
-        thread::sleep_ms(5000);
     }
 
     fn mod_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
@@ -779,7 +784,7 @@ impl GameBuilder {
                 .unwrap();
         let renderer = window.renderer().build().unwrap();
         let ttf_ctx = sdl2_ttf::init().unwrap();
-        let font_path = Path::new("assets/fonts/absender.ttf");
+        let font_path = Path::new("assets/fonts/pixel.ttf");
         let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
         let sdl_audio = sdl_ctx.audio().unwrap();
         sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
