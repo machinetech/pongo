@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 sdl2 = "0.9.1"
 sdl2_gfx = "0.6.3"
+sdl2_image = "0.3.0"
 sdl2_ttf = "0.9.1"
 sdl2_mixer = "0.7.1"
 rand = "0.3.11"

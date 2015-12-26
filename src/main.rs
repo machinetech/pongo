@@ -2,6 +2,7 @@ extern crate clock_ticks;
 extern crate rand;
 extern crate sdl2;
 extern crate sdl2_gfx;
+extern crate sdl2_image;
 extern crate sdl2_mixer;
 extern crate sdl2_ttf;
 
@@ -13,6 +14,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
+use sdl2::surface::Surface;
 
 use std::cell::RefCell;
 use std::f32;
@@ -22,6 +24,7 @@ use std::thread;
 use std::vec::Vec;
 
 use sdl2_gfx::primitives::DrawRenderer;
+use sdl2_image::{LoadTexture, INIT_PNG}; 
 use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
 use sdl2_ttf::{Font, Sdl2TtfContext}; 
 
@@ -129,8 +132,8 @@ impl Drawable for Table {
     fn draw(&self, ui: &mut Ui) {
         ui.renderer.set_draw_color(self.color);
         ui.renderer.clear();
-        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 20.);
-        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 20.);
+        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 5.);
+        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 5.);
         self.draw_net(ui);
     }
 
@@ -316,7 +319,6 @@ impl Game {
     
     /// Display welcome screen
     fn show_welcome_screen(&mut self) -> bool {
-        self.ui.poll_event();
         self.ui.renderer.set_draw_color(self.table.borrow().color);
         self.ui.renderer.clear();
         let table_width = self.table.borrow().width;
@@ -328,8 +330,8 @@ impl Game {
                       18., Color::RGB(0xff, 0xff, 0xff));
         self.show_msg("Press any key to start!", table_width / 4., 400., table_width / 2., 
                       50., Color::RGB(0xff, 0xff, 0xff));
-        self.ui.renderer.present();
         let mut start_game: Option<bool> = Option::None;
+        self.ui.renderer.present();
         while start_game.is_none() {
             thread::sleep_ms(100);
             match self.ui.poll_event() {
@@ -581,6 +583,25 @@ impl Game {
         for d in ctx.drawables.iter() {
             d.borrow().draw(&mut self.ui);
         }
+        let mut png_texture = {
+            let png_path = Path::new("assets/images/turtle.png");
+            self.ui.renderer.load_texture(png_path).unwrap() 
+        };
+        match self.lpaddle.borrow().color {
+            Color::RGB(r,g,b) => png_texture.set_color_mod(r,g,b),
+            _ => {}
+        }
+        let mut x = 300;
+        let y = 550;
+        let w = 15;
+        let target = Rect::new_unwrap(x, y, w, 20);
+        self.ui.renderer.copy(&png_texture, None, Some(target));
+        x += w as i32 + 5;
+        let target2 = Rect::new_unwrap(x, y, w, 20);
+        self.ui.renderer.copy(&png_texture, None, Some(target2));
+        x += w as i32 + 5;
+        let target3 = Rect::new_unwrap(x, y, w, 20);
+        self.ui.renderer.copy(&png_texture, None, Some(target3));
         self.ui.renderer.present();
     }
 
@@ -610,7 +631,7 @@ impl Game {
             let height = 60.;
             self.show_msg(msg, x, y, width, height, color);
             self.ui.renderer.present();
-            thread::sleep_ms(5000);
+            thread::sleep_ms(1000);
         }
     }
 
@@ -776,6 +797,7 @@ impl GameBuilder {
         let sdl_ctx = sdl2::init().unwrap();
         //sdl_ctx.mouse().set_relative_mouse_mode(true);
         //sdl_ctx.mouse().show_cursor(false);
+        sdl2_image::init(INIT_PNG);
         let video_subsystem = sdl_ctx.video().unwrap();
         let window = video_subsystem.window("pong", 
                 self.table_width as u32, self.table_height as u32)
