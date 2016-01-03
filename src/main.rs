@@ -578,7 +578,7 @@ impl Game {
         }
 
     }
-    
+
     fn draw(&mut self, ctx: &mut GameLoopContext) {
         for d in ctx.drawables.iter() {
             d.borrow().draw(&mut self.ui);
@@ -587,21 +587,22 @@ impl Game {
             let png_path = Path::new("assets/images/turtle.png");
             self.ui.renderer.load_texture(png_path).unwrap() 
         };
-        match self.lpaddle.borrow().color {
-            Color::RGB(r,g,b) => png_texture.set_color_mod(r,g,b),
-            _ => {}
-        }
         let mut x = 300;
         let y = 550;
         let w = 15;
-        let target = Rect::new_unwrap(x, y, w, 20);
-        self.ui.renderer.copy(&png_texture, None, Some(target));
-        x += w as i32 + 5;
-        let target2 = Rect::new_unwrap(x, y, w, 20);
-        self.ui.renderer.copy(&png_texture, None, Some(target2));
-        x += w as i32 + 5;
-        let target3 = Rect::new_unwrap(x, y, w, 20);
-        self.ui.renderer.copy(&png_texture, None, Some(target3));
+        for i in 0..3 {
+            if i < self.slow_motions_remaining {
+                match self.lpaddle.borrow().color {
+                    Color::RGB(r,g,b) => png_texture.set_color_mod(r,g,b),
+                    _ => {}
+                }
+            } else {
+                png_texture.set_color_mod(0x69,0x69,0x69);
+            }
+            let target = Rect::new_unwrap(x, y, w, 20);
+            self.ui.renderer.copy(&png_texture, None, Some(target));
+            x += w as i32 + 5;
+        }
         self.ui.renderer.present();
     }
 
