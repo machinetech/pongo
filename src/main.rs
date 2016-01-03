@@ -27,8 +27,8 @@ use std::rc::Rc;
 use std::thread;
 use std::vec::Vec;
 
-// Interface for interacting with the user. For example, obtaining user input, drawing to the
-// screen and playing audio.
+/// Interface for interacting with the user. For example, obtaining user input, drawing to the
+/// screen and playing audio.
 struct Ui {
 
     sdl_ctx: Sdl,
@@ -63,19 +63,19 @@ impl Ui {
 
     } 
 
-    // Poll for a single user event.
+    /// Poll for a single user event.
     fn poll_event(&self) -> Option<Event> {
         return self.sdl_ctx.event_pump().unwrap().poll_event();
     }
 
 }
 
-// Trait for types that can be drawn to the screen. 
+/// Trait for types that can be drawn to the screen. 
 trait Drawable {
     fn draw(&self, ui: &mut Ui); 
 }
 
-// Trait for types that can be set back to an initial state. 
+/// Trait for types that can be set back to an initial state. 
 trait Resettable {
     fn reset(&mut self);
 }
@@ -198,6 +198,7 @@ impl Ball {
         };
         
         ball.reset();
+        
         return ball
     }
 }
@@ -261,7 +262,8 @@ struct Paddle {
     width: f32,     
     height: f32,    
     speed: f32,             // Speed in pixels per second. Never changes. 
-    speed_multiplier: f32   // Used to adjust the speed.
+    speed_multiplier: f32,  // Used to adjust the speed.
+    score: u32              // Points won.              
 
 }
 
@@ -284,9 +286,11 @@ impl Paddle {
             height: height, 
             speed: speed,
             speed_multiplier: 1.0,
+            score: 0
         };
 
         paddle.reset();
+        
         return paddle;
     }
 
@@ -302,6 +306,9 @@ impl Resettable for Paddle {
 
         // Revert to initial speed by setting the multiplier back to 1.
         self.speed_multiplier = 1.;
+
+        // Set the score back to zero.
+        self.score = 0;
     }
 
 }
@@ -311,17 +318,16 @@ impl Drawable for Paddle {
     fn draw(&self, ui: &mut Ui) {
 
         ui.renderer.set_draw_color(self.color);
-        let rect = Rect::new_unwrap(self.x as i32, 
+        ui.renderer.fill_rect(Rect::new_unwrap(self.x as i32, 
                                     self.y as i32, 
                                     self.width as u32, 
-                                    self.height as u32);
-        ui.renderer.fill_rect(rect);
+                                    self.height as u32));
 
     }
 
 }
 
-// Holds state that lasts for a single iteration of the game loop.
+/// Holds state that lasts for a single iteration of the game loop.
 struct GameLoopContext {
 
     dt_sec: f32,                            // Time in seconds since last invocation of game loop.
@@ -345,9 +351,13 @@ impl GameLoopContext {
 }
 
 struct Game {
+
     ui: Ui,
+    background_color: Color,
+    width: f32,
+    height: f32,
+    net_color: Color,
     fps: u32,
-    table: Rc<RefCell<Table>>,
     ball: Rc<RefCell<Ball>>,
     lpaddle: Rc<RefCell<Paddle>>,
     rpaddle: Rc<RefCell<Paddle>>,
@@ -356,17 +366,29 @@ struct Game {
     time_slow_motion_started_ms: Option<u64>,
     running: bool,
     resettables: Vec<Rc<RefCell<Resettable>>>
+
 }
 
+/// Contains the game state and executes the game loop.
 impl Game {
 
-    /// Create initial game state. 
-    fn new(ui: Ui, fps: u32, table: Table, ball: Ball, lpaddle: Paddle, 
+    fn new(ui: Ui, 
+           background_color: Color, 
+           width: f32,
+           height: f32,
+           net_color: Color,
+           fps: u32, 
+           ball: Ball, 
+           lpaddle: Paddle, 
            rpaddle: Paddle) -> Game { 
+        
         let mut game = Game { 
             ui: ui, 
+            background_color: background_color,
+            width: width,
+            height: height,
+            net_color: net_color,
             fps: fps, 
-            table: Rc::new(RefCell::new(table)),
             ball: Rc::new(RefCell::new(ball)), 
             lpaddle: Rc::new(RefCell::new(lpaddle)), 
             rpaddle: Rc::new(RefCell::new(rpaddle)), 
@@ -376,20 +398,21 @@ impl Game {
             running: false, 
             resettables: Vec::new()
         };
-        game.resettables.push(game.table.clone());
+        
         game.resettables.push(game.ball.clone());
         game.resettables.push(game.lpaddle.clone());
         game.resettables.push(game.rpaddle.clone());
         game.reset();
-        game
+
+        return game;
 
     }
     
     /// Display welcome screen
     fn show_welcome_screen(&mut self) -> bool {
-        self.ui.renderer.set_draw_color(self.table.borrow().color);
+        self.ui.renderer.set_draw_color(self.background_color);
         self.ui.renderer.clear();
-        let table_width = self.table.borrow().width;
+        let table_width = self.width;
         self.show_msg("Pong", table_width / 4., 100., table_width / 2., 150., 
                       Color::RGB(0xff, 0xff, 0xff));
         self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
@@ -438,7 +461,7 @@ impl Game {
     
     // Called once per frame. 
     fn update(&mut self, ctx: &mut GameLoopContext) {
-        ctx.drawables.push(self.table.clone());
+        //draw table
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
@@ -469,28 +492,15 @@ impl Game {
                             self.time_slow_motion_started_ms = Some(clock_ticks::precise_time_ms());
                         }
                     },
-                    // Move left paddle with mouse scroll wheel. 
-                    Event::MouseWheel{x,y, ..} => {
-                        let y = y as f32;
-                        let table = self.table.borrow();
-                        let mut lpaddle = self.lpaddle.borrow_mut();
-                        lpaddle.y -= y * 5.; 
-                        if lpaddle.y < 0. { 
-                            lpaddle.y = 0.; 
-                        } else if lpaddle.y + lpaddle.height > table.height {
-                            lpaddle.y = table.height - lpaddle.height; 
-                        }
-                    }
                     // Move left paddle with mouse. 
                     Event::MouseMotion{x,y, ..} => {
                         let y = y as f32;
-                        let table = self.table.borrow();
                         let mut lpaddle = self.lpaddle.borrow_mut();
                         lpaddle.y = y; 
                         if lpaddle.y < 0. { 
                             lpaddle.y = 0.; 
-                        } else if lpaddle.y + lpaddle.height > table.height {
-                            lpaddle.y = table.height - lpaddle.height; 
+                        } else if lpaddle.y + lpaddle.height > self.height {
+                            lpaddle.y = self.height - lpaddle.height; 
                         }
                     }
                     _ => {}
@@ -503,11 +513,10 @@ impl Game {
 
     // The game moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
-        let table = self.table.borrow();
         let mut ball = self.ball.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut(); 
         // Move toward oncoming ball. If the ball is moving away, head for the home position.
-        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { table.height / 2. }; 
+        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { self.height / 2. }; 
         // We use non-overlapping segments of the paddle (3/4 vs 1/4) when deciding whether to move
         // the paddle up or down. Using the center of the paddle against the center of the ball is
         // very precise and will result in overshoots. Then in the next frame the paddle jumps up
@@ -527,15 +536,14 @@ impl Game {
         }
         if rpaddle.y < 0. { 
             rpaddle.y = 0.; 
-        } else if rpaddle.y + rpaddle.height > table.height {
-            rpaddle.y = table.height - rpaddle.height; 
+        } else if rpaddle.y + rpaddle.height > self.height {
+            rpaddle.y = self.height - rpaddle.height; 
         }
         ctx.drawables.push(self.rpaddle.clone());
     }
         
     // Move the ball and deal with collisions. 
     fn move_ball(&mut self, ctx: &mut GameLoopContext) {
-        let mut table = self.table.borrow_mut(); 
         let mut ball = self.ball.borrow_mut(); 
         let lpaddle = self.lpaddle.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut();
@@ -548,8 +556,8 @@ impl Game {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
             ctx.audibles.push(self.ui.ping_sound.clone());
-        } else if new_ball_y + ball.diameter >= table.height { 
-            new_ball_y = table.height - (new_ball_y + ball.diameter - table.height) - ball.diameter;
+        } else if new_ball_y + ball.diameter >= self.height { 
+            new_ball_y = self.height - (new_ball_y + ball.diameter - self.height) - ball.diameter;
             ball.vy = -ball.vy;
             ctx.audibles.push(self.ui.ping_sound.clone());
         } 
@@ -612,14 +620,14 @@ impl Game {
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
             // Right player scored.
-            table.rscore += 1;    
+            self.rpaddle.borrow_mut().score += 1;
             ctx.audibles.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
-        } else if new_ball_x + ball.diameter > table.width { 
-            new_ball_x = table.width - (new_ball_x + ball.diameter - table.width) - ball.diameter;
+        } else if new_ball_x + ball.diameter > self.width { 
+            new_ball_x = self.width - (new_ball_x + ball.diameter - self.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
-            table.lscore += 1;    
+            self.lpaddle.borrow_mut().score += 1;
             ctx.audibles.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } 
@@ -683,20 +691,20 @@ impl Game {
     fn check_for_win(&mut self, ctx: &mut GameLoopContext) {
         let mut msg: Option<&str> = Option::None;
         let points_to_win = 5;
-        if self.table.borrow().lscore >= points_to_win {
+        if self.lpaddle.borrow().score >= points_to_win {
             msg = Option::Some("You win!");
-        } else if self.table.borrow().rscore >= points_to_win {
+        } else if self.lpaddle.borrow().score >= points_to_win {
             msg = Option::Some("I win!");
         }
         // We have a winner.
         if let Some(msg) = msg {
             self.running = false;
-            self.ui.renderer.set_draw_color(self.table.borrow().color);
+            self.ui.renderer.set_draw_color(self.background_color);
             self.ui.renderer.clear();
-            let x = self.table.borrow().width /2. /2.;
-            let y = self.table.borrow().height /2. - 100.;
+            let x = self.width /2. /2.;
+            let y = self.height /2. - 100.;
             let color = Color::RGB(0xff, 0xff, 0xff);
-            let width = self.table.borrow().width / 2.;
+            let width = self.width / 2.;
             let height = 60.;
             self.show_msg(msg, x, y, width, height, color);
             self.ui.renderer.present();
@@ -745,204 +753,108 @@ impl Resettable for Game {
 }
 
 struct GameBuilder {
-    table_color: Color,
-    table_width: f32,
-    table_height: f32,
-    net_color: Color,
-    fps: u32,
-    ball_color: Color,
-    ball_speed: f32,
-    ball_diameter: f32,
-    lpaddle_color: Color,
-    rpaddle_color: Color,
-    paddle_offset: f32,
-    paddle_width: f32,
-    paddle_height: f32,
-    paddle_speed: f32,
-    max_launch_angle: f32,
-    max_bounce_angle: f32
+    something: i32
 }
 
 impl GameBuilder {
 
     fn new() -> GameBuilder {
         GameBuilder {
-            table_color: Color::RGB(0x00, 0x00, 0x00),
-            table_width: 480.,
-            table_height: 320.,
-            net_color: Color::RGB(0xff, 0xff, 0xff),
-            fps: 40,
-            ball_color: Color::RGB(0xff, 0xff, 0xff),
-            ball_speed: 320.,
-            ball_diameter: 10.,
-            lpaddle_color: Color::RGB(0xff, 0xff, 0xff),
-            rpaddle_color: Color::RGB(0xff, 0xff, 0xff),
-            paddle_offset: 4.,
-            paddle_width: 10.,
-            paddle_height: 80.,
-            paddle_speed: 640.,
-            max_launch_angle: f32::consts::PI/4.,
-            max_bounce_angle: f32::consts::PI/12.
+            something: 0
         }
     }
 
-    fn with_table_dimensions(mut self, width: f32, height: f32) -> GameBuilder {
-        self.table_width = width;
-        self.table_height = height;
-        self
-    }
+    fn build(&self) -> Game {
 
-    fn with_table_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.table_color = Color::RGB(r,g,b);
-        self
-    }
-
-    fn with_net_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.net_color = Color::RGB(r,g,b);
-        self
-    }
-    
-    fn with_fps(mut self, fps: u32) -> GameBuilder {
-        self.fps = fps; 
-        self
-    }
-    
-    fn with_ball_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.ball_color = Color::RGB(r,g,b);
-        self
-    }
-
-    fn with_ball_speed_per_sec(mut self, speed: f32) -> GameBuilder {
-        self.ball_speed = speed; 
-        self
-    }
-
-    fn with_ball_diameter(mut self, diameter: f32) -> GameBuilder {
-        self.ball_diameter = diameter;
-        self
-    }
-
-    fn with_paddle_offset(mut self, offset: f32) -> GameBuilder {
-        self.paddle_offset = offset;
-        self
-    }
-
-    fn with_paddle_width(mut self, width: f32) -> GameBuilder {
-        self.paddle_width = width;
-        self
-    }
-    
-    fn with_paddle_height(mut self, height: f32) -> GameBuilder {
-        self.paddle_height = height;
-        self
-    }
-
-    fn with_paddle_speed_per_sec(mut self, speed: f32) -> GameBuilder {
-        self.paddle_speed = speed; 
-        self
-    }
-
-    fn with_left_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.lpaddle_color = Color::RGB(r,g,b);
-        self
-    }
-
-    fn with_right_paddle_color(mut self, r: u8, g: u8, b: u8) -> GameBuilder {
-        self.rpaddle_color = Color::RGB(r,g,b);
-        self
-    }
-
-    fn with_max_launch_angle_rads(mut self, max_launch_angle: f32) -> GameBuilder {
-        self.max_launch_angle = max_launch_angle;
-        self
-    }
-    
-    fn with_max_bounce_angle_rads(mut self, max_bounce_angle: f32) -> GameBuilder {
-        self.max_bounce_angle = max_bounce_angle;
-        self
-    }
-
-    fn create_ui(&self) -> Ui {
+        // Screen dimensions and background color.
+        let screen_width = 800.;
+        let screen_height = 600.;
+        let screen_background_color = Color::RGB(0x25, 0x25, 0x25); 
+        
+        // Initialize SDL and capture the window renderer for later use. 
         let sdl_ctx = sdl2::init().unwrap();
+        let video_subsystem = sdl_ctx.video().unwrap();
+        let window = video_subsystem.window("pong", screen_width as u32, screen_height as u32)
+            .position_centered()
+            .build()
+            .unwrap();
+        let renderer = window.renderer().build().unwrap();
+        
         //sdl_ctx.mouse().set_relative_mouse_mode(true);
         //sdl_ctx.mouse().show_cursor(false);
+
+        // Initialize sdl_image for PNG image rendering. 
         sdl2_image::init(INIT_PNG);
-        let video_subsystem = sdl_ctx.video().unwrap();
-        let window = video_subsystem.window("pong", 
-                self.table_width as u32, self.table_height as u32)
-                .position_centered()
-                .build()
-                .unwrap();
-        let renderer = window.renderer().build().unwrap();
+        
+        // Initialize sdl_ttf for true type font rendering, then load and store the fonts we will
+        // use in the game.
         let ttf_ctx = sdl2_ttf::init().unwrap();
         let font_path = Path::new("assets/fonts/pixel.ttf");
         let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
+
+        // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
+        // in the game.
         let sdl_audio = sdl_ctx.audio().unwrap();
         sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
         let ping_sound_path = Path::new("assets/sounds/ping.wav");
         let ping_sound = sdl2_mixer::Music::from_file(ping_sound_path).unwrap();
         let pong_sound_path = Path::new("assets/sounds/pong.wav");
         let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
-        Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound)
-    }
 
-    fn create_table(&self) -> Table {
-        Table::new(self.table_color, self.table_width, self.table_height, self.net_color,
-                   self.lpaddle_color, self.rpaddle_color)
-    }
+        // Package the media we will use later on in the UI type. 
+        let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound);
 
-    fn create_ball(&self) -> Ball {
+        // Our ball will launch from the center of the screen.
+        let ball = Ball::new(Color::RGB(0xff, 0xcc, 0x00), 
+                             screen_width / 2., 
+                             screen_height / 2., 
+                             11., 
+                             500.,
+                             f32::consts::PI / 4.,
+                             f32::consts::PI / 12.); 
         
-        Ball::new(self.ball_color, self.table_width/2., self.table_height/2., self.ball_diameter,
-                  self.ball_speed, self.max_launch_angle, self.max_bounce_angle)
-    }    
+        
+        // Common ball properties.
+        let paddle_x_offset = 4.;
+        let paddle_width = 5.;
+        let paddle_height = 60.;
+        let paddle_initial_y = (screen_height - paddle_height) / 2.;
+        
+        // The left paddle starts in the left center of the screen and represents the human player.
+        let left_paddle = Paddle::new(Color::RGB(0xf6, 0xf4, 0xda), 
+                                      paddle_x_offset, 
+                                      paddle_initial_y,
+                                      paddle_width,
+                                      paddle_height,
+                                      0.); // There is no restriction on how fast the human may
+                                          // may move the paddle.
 
-    fn create_left_paddle(&self) -> Paddle {
-        let width = self.paddle_width;
-        let height = self.paddle_height;
-        let x = self.paddle_offset;
-        let y = (self.table_height - height)/2.;
-        let speed = self.paddle_speed;
-        Paddle::new(self.lpaddle_color, x, y, width, height, speed)
-    }
+        // The right paddle start in the right center of the screen and represents the computer
+        // player.
+        let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
+                                      screen_height - (paddle_x_offset + paddle_height), 
+                                      paddle_initial_y,
+                                      paddle_width,
+                                      paddle_height,
+                                      300.);
+        
+        // Assemble and return the game. We're ready to play!
+        return Game::new(ui,
+                         screen_background_color,
+                         screen_width,
+                         screen_height,
+                         Color::RGB(0xff, 0xff, 0xff),
+                         40,
+                         ball,
+                         left_paddle,
+                         right_paddle);
 
-    fn create_right_paddle(&self) -> Paddle {
-        let width = self.paddle_width;
-        let height = self.paddle_height;
-        let x = self.table_width - (self.paddle_offset + width);
-        let y = (self.table_height - height)/2.;
-        let speed = self.paddle_speed;
-        Paddle::new(self.rpaddle_color, x, y, width, height, speed)
     }
-
-    fn build(&self) -> Game {
-        Game::new(self.create_ui(), 
-                  self.fps, 
-                  self.create_table(),
-                  self.create_ball(),
-                  self.create_left_paddle(),
-                  self.create_right_paddle())
-    }
+    
 }
 
 fn main() {
-    let mut game = GameBuilder::new()
-        .with_table_dimensions(800., 600.)
-        .with_table_color(0x25, 0x25, 0x25)
-        .with_net_color(0xf4, 0xf3, 0xee)
-        .with_ball_color(0xff, 0xcc, 0x00)
-        .with_ball_speed_per_sec(500.) 
-        .with_ball_diameter(11.)
-        .with_paddle_offset(4.)
-        .with_paddle_width(5.)
-        .with_paddle_height(60.)
-        .with_paddle_speed_per_sec(300.) 
-        .with_left_paddle_color(0xf6, 0xf4, 0xda)
-        .with_right_paddle_color(0xd9, 0xe2, 0xe1)
-        .with_max_launch_angle_rads(f32::consts::PI*50./180.)
-        .with_max_bounce_angle_rads(f32::consts::PI*45./180.)
-        .with_fps(40)
-        .build();
+    let mut game = GameBuilder::new().build();
     while true {
         if !game.show_welcome_screen() {
             return
