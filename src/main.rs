@@ -13,8 +13,12 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::Renderer;
-use sdl2::surface::Surface;
+use sdl2::render::{Renderer, Texture};
+
+use sdl2_gfx::primitives::DrawRenderer;
+use sdl2_image::{LoadTexture, INIT_PNG}; 
+use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
+use sdl2_ttf::{Font, Sdl2TtfContext}; 
 
 use std::cell::RefCell;
 use std::f32;
@@ -23,45 +27,55 @@ use std::rc::Rc;
 use std::thread;
 use std::vec::Vec;
 
-use sdl2_gfx::primitives::DrawRenderer;
-use sdl2_image::{LoadTexture, INIT_PNG}; 
-use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Sdl2TtfContext}; 
-
+// Interface for interacting with the user. For example, obtaining user input, drawing to the
+// screen and playing audio.
 struct Ui {
+
     sdl_ctx: Sdl,
     renderer: Renderer<'static>,
     ttf_ctx: Sdl2TtfContext,
-    font: Font,
+    pixel_font: Font,
     sdl_audio: AudioSubsystem, 
     ping_sound: Rc<Music>,
     pong_sound: Rc<Music>
+
 }
 
 impl Ui {
-    fn new(sdl_ctx: Sdl, renderer: Renderer<'static>, ttf_ctx: Sdl2TtfContext, font: Font,
-           sdl_audio: AudioSubsystem, ping_sound: Music, pong_sound: Music) -> Ui {
-        Ui { 
+
+    fn new(sdl_ctx: Sdl, 
+           renderer: Renderer<'static>, 
+           ttf_ctx: Sdl2TtfContext, 
+           pixel_font: Font,
+           sdl_audio: AudioSubsystem, 
+           ping_sound: Music, 
+           pong_sound: Music) -> Ui {
+
+        return Ui { 
             sdl_ctx: sdl_ctx, 
             renderer: renderer,
             ttf_ctx: ttf_ctx,
-            font: font,
+            pixel_font: pixel_font,
             sdl_audio: sdl_audio,
             ping_sound: Rc::new(ping_sound),
             pong_sound: Rc::new(pong_sound)
-        }  
+        };  
+
     } 
 
+    // Poll for a single user event.
     fn poll_event(&self) -> Option<Event> {
-        let mut event_pump = self.sdl_ctx.event_pump().unwrap();
-        return event_pump.poll_event();
+        return self.sdl_ctx.event_pump().unwrap().poll_event();
     }
+
 }
 
+// Trait for types that can be drawn to the screen. 
 trait Drawable {
     fn draw(&self, ui: &mut Ui); 
 }
 
+// Trait for types that can be set back to an initial state. 
 trait Resettable {
     fn reset(&mut self);
 }
@@ -97,7 +111,7 @@ impl Table {
     fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
         let formatted_score = format!("{:^3}", score);
         let formatted_score_ref: &str = formatted_score.as_ref();
-        let surface = ui.font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
+        let surface = ui.pixel_font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
         let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
         ui.renderer.copy(&texture, None, Some(target));
@@ -140,24 +154,34 @@ impl Drawable for Table {
 }
 
 struct Ball {
-    color: Color,
-    initial_x: f32,
-    initial_y: f32,
-    x: f32,                         // x pixel co-ordinate of top left corner
-    y: f32,                         // y pixel co-ordinate of top left corner
-    diameter: f32,    
-    speed: f32,                     // pixels per second 
-    speed_multiplier: f32,
-    vx: f32,                        // pixels per second
-    vy: f32,                        // pixels per second
-    max_launch_angle: f32, 
-    max_bounce_angle: f32           // Angle up or down from imaginary horizontal line running 
-                                    // perpendicular to the paddle. 
+
+    color: Color,                   
+    initial_x: f32,                 // The initial x location. Stored so that we can reset the ball.
+    initial_y: f32,                 // The initial y location. Stored so that we can reset the ball.
+    x: f32,                         // x pixel co-ordinate of top left corner.
+    y: f32,                         // y pixel co-ordinate of top left corner.
+    diameter: f32,                   
+    speed: f32,                     // Speed in pixels per second. Never changes.
+    speed_multiplier: f32,          // Used to adjust the speed.
+    vx: f32,                        // Horizontal velocity in pixels per second.
+    vy: f32,                        // Vertical velocity in pixels per second.
+    max_launch_angle: f32,          // Maximum angle at which the ball will launch. 
+    max_bounce_angle: f32           // Maximum angle at which ball will bounce when hitting paddle.
+                                    // The angle is taken as up or down from an imaginary line
+                                    // running perpendicular to the paddle (i.o.w. running
+                                    // horizontal)
 }
 
 impl Ball {
-    fn new(color: Color, x: f32, y: f32, diameter: f32, speed: f32, max_launch_angle: f32, 
+
+    fn new(color: Color, 
+           x: f32, 
+           y: f32, 
+           diameter: f32, 
+           speed: f32, 
+           max_launch_angle: f32, 
            max_bounce_angle: f32) -> Ball {
+
         let mut ball = Ball { 
             color: color, 
             initial_x: x, 
@@ -172,20 +196,29 @@ impl Ball {
             max_launch_angle: max_launch_angle, 
             max_bounce_angle: max_bounce_angle 
         };
+        
         ball.reset();
-        ball
+        return ball
     }
 }
 
 impl Resettable for Ball {
 
     fn reset(&mut self) {
+        
+        // Restore the initial x and y co-ordinates.
         self.x = self.initial_x;
         self.y = self.initial_y;
 
-        let mut rng = rand::thread_rng();
+        // Revert back to the initial speed by setting the multiplier to 1.
+        self.speed_multiplier = 1.;
 
+        // Calculate a new launch angle. The launch angle is always random, but never greater
+        // than the configured maximum launch angle.
+        let mut rng = rand::thread_rng();
         let launch_angle = Range::new(0., self.max_launch_angle).ind_sample(&mut rng);
+        
+        // Posible direction can be either up (-1) or down (+1).
         let dir = [-1., 1.];
 
         // Use the sine of the angle to determine the vertical speed. Then, 
@@ -198,34 +231,49 @@ impl Resettable for Ball {
         // direction (left or right) to select a horizontal velocity.
         let vx = ((self.speed * self.speed) - (vy * vy)).sqrt() * left_or_right;
 
+        // Assign the newly calculated horizontal and vertical velocities.
         self.vx = vx;
         self.vy = vy;
-        self.speed_multiplier = 1.;
+
     }
 }
 
 impl Drawable for Ball {
+
     fn draw(&self, ui: &mut Ui) {
-        ui.renderer.filled_circle((self.x + self.diameter/2.) as i16, 
-                                  (self.y + self.diameter/2.) as i16, 
-                                  (self.diameter/2.) as i16, self.color);
+
+        let x = self.x + self.diameter / 2.;
+        let y = self.y + self.diameter / 2.;
+        let radius = self.diameter / 2.;
+        ui.renderer.filled_circle(x as i16, y as i16, radius as i16, self.color);
+
     }
+
 }
 
 struct Paddle {
-    color: Color,
-    initial_x: f32,
-    initial_y: f32,
-    x: f32,         // x pixel co-ordinate of top left corner
-    y: f32,         // y pixel co-ordinate of top left corner
+
+    color: Color,   
+    initial_x: f32,         // The initial x location. Stored so that we can reset the paddle.
+    initial_y: f32,         // The initial y location. Stored so that we can reset the paddle.
+    x: f32,                 // x pixel co-ordinate of top left corner
+    y: f32,                 // y pixel co-ordinate of top left corner
     width: f32,     
     height: f32,    
-    speed: f32,     // pixels per second
-    speed_multiplier: f32
+    speed: f32,             // Speed in pixels per second. Never changes. 
+    speed_multiplier: f32   // Used to adjust the speed.
+
 }
 
 impl Paddle {
-    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, speed: f32) -> Paddle {
+
+    fn new(color: Color, 
+           x: f32, 
+           y: f32, 
+           width: f32, 
+           height: f32, 
+           speed: f32) -> Paddle {
+
         let mut paddle = Paddle { 
             color: color,
             initial_x: x, 
@@ -237,43 +285,63 @@ impl Paddle {
             speed: speed,
             speed_multiplier: 1.0,
         };
+
         paddle.reset();
-        paddle
+        return paddle;
     }
 
 }
 
 impl Resettable for Paddle {
+
     fn reset(&mut self) {
+        
+        // Revert to the initial x and y co-ordinates.
         self.x = self.initial_x;
         self.y = self.initial_y;
+
+        // Revert to initial speed by setting the multiplier back to 1.
         self.speed_multiplier = 1.;
     }
+
 }
 
 impl Drawable for Paddle {
+
     fn draw(&self, ui: &mut Ui) {
+
         ui.renderer.set_draw_color(self.color);
-        let rect = Rect::new_unwrap(self.x as i32, self.y as i32, self.width as u32, 
+        let rect = Rect::new_unwrap(self.x as i32, 
+                                    self.y as i32, 
+                                    self.width as u32, 
                                     self.height as u32);
         ui.renderer.fill_rect(rect);
+
     }
+
 }
 
+// Holds state that lasts for a single iteration of the game loop.
 struct GameLoopContext {
-    dt_sec: f32,
-    drawables: Vec<Rc<RefCell<Drawable>>>,
-    audibles: Vec<Rc<Music>>
+
+    dt_sec: f32,                            // Time in seconds since last invocation of game loop.
+    drawables: Vec<Rc<RefCell<Drawable>>>,  // Items that need to be drawn to the screen.
+    audibles: Vec<Rc<Music>>                // Audio that needs to sound.
+
 }
 
 impl GameLoopContext {
+
     fn new(dt_sec: f32) -> GameLoopContext {
-        GameLoopContext {
+
+        return GameLoopContext {
             dt_sec: dt_sec,
             drawables: Vec::new(),
             audibles: Vec::new()
-        }
+        };
+
     }
+
 }
 
 struct Game {
@@ -618,7 +686,7 @@ impl Game {
         if self.table.borrow().lscore >= points_to_win {
             msg = Option::Some("You win!");
         } else if self.table.borrow().rscore >= points_to_win {
-            msg = Option::Some("Computer wins!");
+            msg = Option::Some("I win!");
         }
         // We have a winner.
         if let Some(msg) = msg {
@@ -637,7 +705,7 @@ impl Game {
     }
 
     fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color) {
-        let surface = self.ui.font.render(msg, sdl2_ttf::blended(color)).unwrap();
+        let surface = self.ui.pixel_font.render(msg, sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
         self.ui.renderer.copy(&texture, None, Some(target));
