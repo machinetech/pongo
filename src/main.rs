@@ -80,79 +80,6 @@ trait Resettable {
     fn reset(&mut self);
 }
 
-struct Table {
-    color: Color,
-    width: f32,
-    height: f32,
-    net_color: Color,
-    lscore: u32,
-    lscore_color: Color,
-    rscore: u32,
-    rscore_color: Color
-}
-
-impl Table {
-    fn new(color: Color, width: f32, height: f32, net_color: Color, 
-           lscore_color: Color, rscore_color: Color) -> Table {
-        let mut table = Table {
-            color: color,
-            width: width,
-            height: height,
-            net_color: net_color,
-            lscore: 0,
-            rscore: 0,
-            lscore_color: lscore_color,
-            rscore_color: rscore_color
-        };
-        table.reset();
-        table
-    }
-
-    fn draw_score(&self, ui: &mut Ui, score: u32, color: Color, x: f32, y: f32) {
-        let formatted_score = format!("{:^3}", score);
-        let formatted_score_ref: &str = formatted_score.as_ref();
-        let surface = ui.pixel_font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
-        let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
-        ui.renderer.copy(&texture, None, Some(target));
-    }
-
-    fn draw_net(&self, ui: &mut Ui) {
-        let num_net_dots = 20;
-        let num_net_gaps = num_net_dots - 1;
-        let net_dot_width = 10.;
-        let net_dot_height = self.height / (num_net_dots + num_net_gaps) as f32;
-        for i in 0..num_net_dots + num_net_gaps + 1 {
-            let net_dot_x = self.width / 2. - net_dot_width / 2.;
-            let net_dot_y = i as f32 * net_dot_height; 
-            ui.renderer.set_draw_color(if i % 2 == 0 {self.net_color} else {self.color});
-            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, net_dot_y as i32, 
-                                                net_dot_width as u32, net_dot_height as u32);
-            ui.renderer.fill_rect(net_dot_rect);
-        }
-    }
-
-}
-
-impl Resettable for Table {
-    fn reset(&mut self) {
-        self.lscore = 0;
-        self.rscore = 0;
-    }
-}
-
-impl Drawable for Table {
-    
-    fn draw(&self, ui: &mut Ui) {
-        ui.renderer.set_draw_color(self.color);
-        ui.renderer.clear();
-        self.draw_score(ui, self.lscore, self.lscore_color, self.width / 2. - 100., 5.);
-        self.draw_score(ui, self.rscore, self.rscore_color, self.width / 2. + 20., 5.);
-        self.draw_net(ui);
-    }
-
-}
-
 struct Ball {
 
     color: Color,                   
@@ -207,7 +134,7 @@ impl Resettable for Ball {
 
     fn reset(&mut self) {
         
-        // Restore the initial x and y co-ordinates.
+        // Restore the initial x and y coordinates.
         self.x = self.initial_x;
         self.y = self.initial_y;
 
@@ -300,7 +227,7 @@ impl Resettable for Paddle {
 
     fn reset(&mut self) {
         
-        // Revert to the initial x and y co-ordinates.
+        // Revert to the initial x and y coordinates.
         self.x = self.initial_x;
         self.y = self.initial_y;
 
@@ -330,9 +257,9 @@ impl Drawable for Paddle {
 /// Holds state that lasts for a single iteration of the game loop.
 struct GameLoopContext {
 
-    dt_sec: f32,                            // Time in seconds since last invocation of game loop.
-    drawables: Vec<Rc<RefCell<Drawable>>>,  // Items that need to be drawn to the screen.
-    audibles: Vec<Rc<Music>>                // Audio that needs to sound.
+    dt_sec: f32,                                          // Seconds since last game loop.
+    layered_draw_queue: [Vec<Rc<RefCell<Drawable>>>; 2],  // Items to draw. 
+    audible_queue: Vec<Rc<Music>>                         // Audio that needs to sound.
 
 }
 
@@ -342,8 +269,8 @@ impl GameLoopContext {
 
         return GameLoopContext {
             dt_sec: dt_sec,
-            drawables: Vec::new(),
-            audibles: Vec::new()
+            layered_draw_queue: [Vec::new(), Vec::new()],
+            audible_queue: Vec::new()
         };
 
     }
@@ -461,7 +388,6 @@ impl Game {
     
     // Called once per frame. 
     fn update(&mut self, ctx: &mut GameLoopContext) {
-        //draw table
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
@@ -508,80 +434,112 @@ impl Game {
             },
             None => {}
         }
-        ctx.drawables.push(self.lpaddle.clone());
+        ctx.layered_draw_queue[1].push(self.lpaddle.clone());
     }
 
     // The game moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
-        let mut ball = self.ball.borrow();
+       
+        let ball = self.ball.borrow();
         let mut rpaddle = self.rpaddle.borrow_mut(); 
-        // Move toward oncoming ball. If the ball is moving away, head for the home position.
-        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2. } else { self.height / 2. }; 
+
+        // If ball is moving toward the paddle, then track the ball. If the ball is moving away
+        // from the paddle, then move toward the home position.
+        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2.  } else { self.height / 2. }; 
+
         // We use non-overlapping segments of the paddle (3/4 vs 1/4) when deciding whether to move
         // the paddle up or down. Using the center of the paddle against the center of the ball is
         // very precise and will result in overshoots. Then in the next frame the paddle jumps up
         // to compensate. Using different segments, we stabilize the movement.
-        if tracking_y > rpaddle.y + rpaddle.height * (3./4.) {
+        if tracking_y > rpaddle.y + rpaddle.height * (3. / 4.) {
+
             rpaddle.y += self.mod_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
+
             // Guard against overshooting the ball.
             if rpaddle.y > tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
-        } else if tracking_y < rpaddle.y + rpaddle.height * (1./4.) {
+            
+        } else if tracking_y < rpaddle.y + rpaddle.height * (1. / 4.) {
+
             rpaddle.y -= self.mod_speed(rpaddle.speed, rpaddle.speed_multiplier) * ctx.dt_sec;
+
             // Guard against overshooting the ball.
             if rpaddle.y + rpaddle.height < tracking_y {
                 rpaddle.y = tracking_y - rpaddle.height / 2.;
             }
+
         }
+
+        // Guard against moving up or down beyond the screen bounds.
         if rpaddle.y < 0. { 
             rpaddle.y = 0.; 
         } else if rpaddle.y + rpaddle.height > self.height {
             rpaddle.y = self.height - rpaddle.height; 
         }
-        ctx.drawables.push(self.rpaddle.clone());
+        
+        // Push right paddle onto the top layer of the draw queue.
+        ctx.layered_draw_queue[1].push(self.rpaddle.clone());
+
     }
         
     // Move the ball and deal with collisions. 
     fn move_ball(&mut self, ctx: &mut GameLoopContext) {
+
         let mut ball = self.ball.borrow_mut(); 
-        let lpaddle = self.lpaddle.borrow();
+        let mut lpaddle = self.lpaddle.borrow_mut();
         let mut rpaddle = self.rpaddle.borrow_mut();
         
+        // Calculate the tentative new ball coordinates based (before we take into account 
+        // travelling beyond the screen bounds or hitting a wall or paddle).
         let mut new_ball_x = ball.x + self.mod_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
         let mut new_ball_y = ball.y + self.mod_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
 
-        // Top or bottom wall.
+        // If the ball hit the top or bottom wall, then the angle of deflection will be equal
+        // to the angle of incidence. Instead of calculating the angle and new x and y coordinates,
+        // we keep the x coordinate unchanged, but reverse the horizontal direction of the 
+        // distance travelled beyond the wall bounds. Next, we also reverse the horizontal
+        // velocity.
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
-            ctx.audibles.push(self.ui.ping_sound.clone());
+            ctx.audible_queue.push(self.ui.ping_sound.clone());
         } else if new_ball_y + ball.diameter >= self.height { 
             new_ball_y = self.height - (new_ball_y + ball.diameter - self.height) - ball.diameter;
             ball.vy = -ball.vy;
-            ctx.audibles.push(self.ui.ping_sound.clone());
+            ctx.audible_queue.push(self.ui.ping_sound.clone());
         } 
 
         let mut bounce_that_allows_speedup: bool = false;
 
-        // Left or right paddle.
+        // If the ball hit the left or right paddle. 
         if new_ball_x < lpaddle.x + lpaddle.width && ball.x >= lpaddle.x + lpaddle.width {
+
+            // The x position indicates a hit. Still need to check the y position...
             let bounce_x = lpaddle.x + lpaddle.width; 
+
             // The gradient of the straight line from (ball.x,ball.y) to (bounce_x,bounce_y) to
             // (new_ball_x,new_ball_y) stays constant, so we can use that to find the value of the
             // top left corner of the ball when it bounces.  
             let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
+
             if bounce_y + ball.diameter >= lpaddle.y && bounce_y <= lpaddle.y + lpaddle.height {
-                // Calculate where the center of the ball hit relative to center of the paddle.
+               
+                // The y position indicates a hit also! 
+                
+                // Calculate where the center of the ball hit relative to the center of the paddle.
                 let relative_y = (lpaddle.y + lpaddle.height / 2.) - (bounce_y + ball.diameter / 2.);
+                
                 // Use the ratio of the bounce position to half the height of the paddle as an
                 // angle multiplier.
                 let bounce_angle_multiplier = (relative_y / (lpaddle.height / 2.)).abs();
                 let bounce_angle = bounce_angle_multiplier * ball.max_bounce_angle;
+
                 // Calculate completely new x and y velocities using simple trigonometric
                 // identities.
                 ball.vx = ball.speed * bounce_angle.cos();
                 ball.vy = ball.speed * bounce_angle.sin() * if ball.vy < 0. {-1.} else {1.}; 
+
                 // The imaginary distance travelled beyond the paddle equals the actual distance
                 // travelled after the bounce. To calculate the time it took to travel the distance
                 // after the bounce, we can take the total time and multiply that by a fraction
@@ -595,12 +553,20 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                ctx.audibles.push(self.ui.pong_sound.clone()); 
+                ctx.audible_queue.push(self.ui.pong_sound.clone()); 
+
+                // May speedup after hitting the left paddle.
                 bounce_that_allows_speedup = true;
             }
+
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
+            
+            // The logic around hitting the right paddle is very similar to that for hitting the
+            // left paddle.
+
             let bounce_x = rpaddle.x - ball.diameter; 
             let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
+
             if bounce_y + ball.diameter  >= rpaddle.y && bounce_y <= rpaddle.y + rpaddle.height {
                 let relative_y = (rpaddle.y + rpaddle.height / 2.) - (bounce_y + ball.diameter / 2.);
                 let bounce_angle_multiplier = (relative_y / (rpaddle.height / 2.)).abs();
@@ -610,31 +576,37 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                ctx.audibles.push(self.ui.ping_sound.clone()); 
+                ctx.audible_queue.push(self.ui.ping_sound.clone()); 
+
+                // May speedup after hitting the right paddle.
                 bounce_that_allows_speedup = true;
             }
+
         } 
 
-        // Left or right wall.
+        // If the ball hit the left or right wall, then the angle of deflection will be equal
+        // to the angle of incidence. Instead of calculating the angle and new x and y coordinates,
+        // we keep the x coordinate unchanged, but reverse the vertical direction of the distance 
+        // travelled beyond the wall bounds. Next, we also reverse the vertical velocity.
         if new_ball_x < 0. { 
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
             // Right player scored.
-            self.rpaddle.borrow_mut().score += 1;
-            ctx.audibles.push(self.ui.ping_sound.clone()); 
+            rpaddle.score += 1;
+            ctx.audible_queue.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } else if new_ball_x + ball.diameter > self.width { 
             new_ball_x = self.width - (new_ball_x + ball.diameter - self.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
-            self.lpaddle.borrow_mut().score += 1;
-            ctx.audibles.push(self.ui.ping_sound.clone()); 
+            lpaddle.score += 1;
+            ctx.audible_queue.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } 
 
         ball.x = new_ball_x;
         ball.y = new_ball_y;
-        ctx.drawables.push(self.ball.clone());
+        ctx.layered_draw_queue[1].push(self.ball.clone());
 
         // Speedup the ball periodically until max speed reached. 
         let time_now_ms = clock_ticks::precise_time_ms();
@@ -656,8 +628,21 @@ impl Game {
     }
 
     fn draw(&mut self, ctx: &mut GameLoopContext) {
-        for d in ctx.drawables.iter() {
-            d.borrow().draw(&mut self.ui);
+        
+        // Set background color and clear the screen.
+        self.ui.renderer.set_draw_color(self.background_color);
+        self.ui.renderer.clear();
+        
+        //let lpaddle = self.lpaddle.borrow();
+        //self.draw_score(lpaddle.score, lpaddle.color, self.width / 2. - 100., 5.);
+        //let rpaddle = self.rpaddle.borrow();
+        //self.draw_score(rpaddle.score, rpaddle.color, self.width / 2. + 20., 5.);
+        
+        self.draw_net();
+        for layer in ctx.layered_draw_queue.iter() {
+            for d in layer.iter() {
+                d.borrow().draw(&mut self.ui);
+            }
         }
         let mut png_texture = {
             let png_path = Path::new("assets/images/turtle.png");
@@ -682,8 +667,31 @@ impl Game {
         self.ui.renderer.present();
     }
 
+    fn draw_score(&mut self, score: u32, color: Color, x: f32, y: f32) {
+        let formatted_score = format!("{:^3}", score);
+        let formatted_score_ref: &str = formatted_score.as_ref();
+        let surface = self.ui.pixel_font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
+        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
+        self.ui.renderer.copy(&texture, None, Some(target));
+    }
+
+    fn draw_net(&mut self) {
+        let num_net_dots = 20;
+        let num_net_gaps = num_net_dots - 1;
+        let net_dot_width = 10.;
+        let net_dot_height = self.height / (num_net_dots + num_net_gaps) as f32;
+        for i in 0..num_net_dots + num_net_gaps + 1 {
+            let net_dot_x = self.width / 2. - net_dot_width / 2.;
+            let net_dot_y = i as f32 * net_dot_height; 
+            self.ui.renderer.set_draw_color(if i % 2 == 0 {self.net_color} else {self.background_color});
+            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, net_dot_y as i32, 
+                                                net_dot_width as u32, net_dot_height as u32);
+            self.ui.renderer.fill_rect(net_dot_rect);
+        }
+    }
     fn play_audio(&mut self, ctx: &mut GameLoopContext) {
-        for a in ctx.audibles.iter() {
+        for a in ctx.audible_queue.iter() {
             a.play(1);
         }
     }
@@ -810,8 +818,8 @@ impl GameBuilder {
                              screen_height / 2., 
                              11., 
                              500.,
-                             f32::consts::PI / 4.,
-                             f32::consts::PI / 12.); 
+                             f32::consts::PI * 50. / 180.,
+                             f32::consts::PI * 45. / 180.); 
         
         
         // Common ball properties.
@@ -832,7 +840,7 @@ impl GameBuilder {
         // The right paddle start in the right center of the screen and represents the computer
         // player.
         let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
-                                      screen_height - (paddle_x_offset + paddle_height), 
+                                      screen_width - (paddle_x_offset + paddle_width), 
                                       paddle_initial_y,
                                       paddle_width,
                                       paddle_height,
