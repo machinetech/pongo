@@ -372,22 +372,47 @@ impl Game {
         return start_game.unwrap();
     }
 
-    /// Start the game and block until finished. 
-    fn start(&mut self) {
+    /// Entry point into the game. Handles transition between showing the welcome screen, running
+    /// the game and returning to the welcome screen.
+    fn launch_then_block_until_exit(&mut self) {
+
+        loop {
+            
+            // The game will exit when the user exits the welcome screen.
+            if !self.show_welcome_screen() {
+               return; 
+            }
+            
+            // Execute the game loop over and over again until the user quits or someone wins.
+            self.execute_game_loop();
+            
+            // Transition back to the welcome screen, but first revert the game to its initial 
+            // state.
+            self.reset();
+
+        }
+    
+    }
+
+    /// Execute the game loop over and over again until the user quits or someone wins. 
+    fn execute_game_loop(&mut self) {
+
         self.running = true;
         let mut time_last_invocation = clock_ticks::precise_time_ms();
+
         while self.running {
             let time_this_invocation = clock_ticks::precise_time_ms();
             let dt_ms = time_this_invocation - time_last_invocation;
-            let mut ctx = GameLoopContext::new(dt_ms as f32/ 1000.);
-            self.update(&mut ctx); 
-            self.cap_fps(dt_ms);
+            let mut ctx = GameLoopContext::new(dt_ms as f32 / 1000.);
+            self.execute_game_loop_iteration_per_frame(&mut ctx); 
+            self.cap_frames_per_second(dt_ms);
             time_last_invocation = time_this_invocation;
         } 
+
     }
     
     // Called once per frame. 
-    fn update(&mut self, ctx: &mut GameLoopContext) {
+    fn execute_game_loop_iteration_per_frame(&mut self, ctx: &mut GameLoopContext) {
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
@@ -677,10 +702,12 @@ impl Game {
     }
 
     fn draw_net(&mut self) {
+
         let num_net_dots = 20;
         let num_net_gaps = num_net_dots - 1;
         let net_dot_width = 10.;
         let net_dot_height = self.height / (num_net_dots + num_net_gaps) as f32;
+
         for i in 0..num_net_dots + num_net_gaps + 1 {
             let net_dot_x = self.width / 2. - net_dot_width / 2.;
             let net_dot_y = i as f32 * net_dot_height; 
@@ -689,7 +716,9 @@ impl Game {
                                                 net_dot_width as u32, net_dot_height as u32);
             self.ui.renderer.fill_rect(net_dot_rect);
         }
+
     }
+
     fn play_audio(&mut self, ctx: &mut GameLoopContext) {
         for a in ctx.audible_queue.iter() {
             a.play(1);
@@ -697,13 +726,16 @@ impl Game {
     }
 
     fn check_for_win(&mut self, ctx: &mut GameLoopContext) {
+
         let mut msg: Option<&str> = Option::None;
         let points_to_win = 5;
+
         if self.lpaddle.borrow().score >= points_to_win {
             msg = Option::Some("You win!");
         } else if self.lpaddle.borrow().score >= points_to_win {
             msg = Option::Some("I win!");
         }
+        
         // We have a winner.
         if let Some(msg) = msg {
             self.running = false;
@@ -718,156 +750,151 @@ impl Game {
             self.ui.renderer.present();
             thread::sleep_ms(1000);
         }
+
     }
 
     fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color) {
+
         let surface = self.ui.pixel_font.render(msg, sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
         self.ui.renderer.copy(&texture, None, Some(target));
+
     }
 
+    /// Modify speed by applying indicated multiplier. Additionally, if a slow motion turn is
+    /// active, then halve the resulting speed.
     fn mod_speed(&self, speed: f32, speed_multiplier: f32) -> f32 {
+
+        let mut modified_speed = speed * speed_multiplier;
+
         match self.time_slow_motion_started_ms {
-            None => {
-                speed * speed_multiplier
-            },
             Some(time_slow_motion_started_ms) => {
-                speed * speed_multiplier * 0.5
-            }
+                modified_speed *= 0.5;
+            },
+            None => {}
         }
+
+        return modified_speed;
+
     }
 
-    // Ensure we run no faster than the desired fps by introducing
-    // a delay if necessary.
-    fn cap_fps(&self, took_ms: u64) {
-        let max_ms = 1000 / self.fps as u64;
-        if max_ms > took_ms {
-            thread::sleep_ms((max_ms - took_ms) as u32);
+    /// Ensure we run no faster than the desired fps by introducing a delay if necessary.
+    fn cap_frames_per_second(&self, duration_of_last_frame_execution_ms: u64) {
+
+        let max_delay_ms = 1000 / self.fps as u64;
+        if max_delay_ms > duration_of_last_frame_execution_ms {
+            thread::sleep_ms((max_delay_ms - duration_of_last_frame_execution_ms) as u32);
         }
+
     }
     
 }
 
 impl Resettable for Game {
+
     fn reset(&mut self) {
+
         self.time_ball_last_speedup_ms = Option::None;
         self.slow_motions_remaining = 3;
         self.time_slow_motion_started_ms = Option::None;
+
         for r in self.resettables.iter() {
             r.borrow_mut().reset();
         }
+
     } 
+
 }
 
-struct GameBuilder {
-    something: i32
-}
+/// Assemble the game components and wire them together using dependency injection. 
+fn build() -> Game {
 
-impl GameBuilder {
-
-    fn new() -> GameBuilder {
-        GameBuilder {
-            something: 0
-        }
-    }
-
-    fn build(&self) -> Game {
-
-        // Screen dimensions and background color.
-        let screen_width = 800.;
-        let screen_height = 600.;
-        let screen_background_color = Color::RGB(0x25, 0x25, 0x25); 
-        
-        // Initialize SDL and capture the window renderer for later use. 
-        let sdl_ctx = sdl2::init().unwrap();
-        let video_subsystem = sdl_ctx.video().unwrap();
-        let window = video_subsystem.window("pong", screen_width as u32, screen_height as u32)
-            .position_centered()
-            .build()
-            .unwrap();
-        let renderer = window.renderer().build().unwrap();
-        
-        //sdl_ctx.mouse().set_relative_mouse_mode(true);
-        //sdl_ctx.mouse().show_cursor(false);
-
-        // Initialize sdl_image for PNG image rendering. 
-        sdl2_image::init(INIT_PNG);
-        
-        // Initialize sdl_ttf for true type font rendering, then load and store the fonts we will
-        // use in the game.
-        let ttf_ctx = sdl2_ttf::init().unwrap();
-        let font_path = Path::new("assets/fonts/pixel.ttf");
-        let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
-
-        // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
-        // in the game.
-        let sdl_audio = sdl_ctx.audio().unwrap();
-        sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
-        let ping_sound_path = Path::new("assets/sounds/ping.wav");
-        let ping_sound = sdl2_mixer::Music::from_file(ping_sound_path).unwrap();
-        let pong_sound_path = Path::new("assets/sounds/pong.wav");
-        let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
-
-        // Package the media we will use later on in the UI type. 
-        let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound);
-
-        // Our ball will launch from the center of the screen.
-        let ball = Ball::new(Color::RGB(0xff, 0xcc, 0x00), 
-                             screen_width / 2., 
-                             screen_height / 2., 
-                             11., 
-                             500.,
-                             f32::consts::PI * 50. / 180.,
-                             f32::consts::PI * 45. / 180.); 
-        
-        
-        // Common ball properties.
-        let paddle_x_offset = 4.;
-        let paddle_width = 5.;
-        let paddle_height = 60.;
-        let paddle_initial_y = (screen_height - paddle_height) / 2.;
-        
-        // The left paddle starts in the left center of the screen and represents the human player.
-        let left_paddle = Paddle::new(Color::RGB(0xf6, 0xf4, 0xda), 
-                                      paddle_x_offset, 
-                                      paddle_initial_y,
-                                      paddle_width,
-                                      paddle_height,
-                                      0.); // There is no restriction on how fast the human may
-                                          // may move the paddle.
-
-        // The right paddle start in the right center of the screen and represents the computer
-        // player.
-        let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
-                                      screen_width - (paddle_x_offset + paddle_width), 
-                                      paddle_initial_y,
-                                      paddle_width,
-                                      paddle_height,
-                                      300.);
-        
-        // Assemble and return the game. We're ready to play!
-        return Game::new(ui,
-                         screen_background_color,
-                         screen_width,
-                         screen_height,
-                         Color::RGB(0xff, 0xff, 0xff),
-                         40,
-                         ball,
-                         left_paddle,
-                         right_paddle);
-
-    }
+    // Screen dimensions and background color.
+    let screen_width = 800.;
+    let screen_height = 600.;
+    let screen_background_color = Color::RGB(0x25, 0x25, 0x25); 
     
-}
+    // Initialize SDL and capture the window renderer for later use. 
+    let sdl_ctx = sdl2::init().unwrap();
+    let video_subsystem = sdl_ctx.video().unwrap();
+    let window = video_subsystem.window("pong", screen_width as u32, screen_height as u32)
+        .position_centered()
+        .build()
+        .unwrap();
+    let renderer = window.renderer().build().unwrap();
+    
+    //sdl_ctx.mouse().set_relative_mouse_mode(true);
+    //sdl_ctx.mouse().show_cursor(false);
 
+    // Initialize sdl_image for PNG image rendering. 
+    sdl2_image::init(INIT_PNG);
+    
+    // Initialize sdl_ttf for true type font rendering, then load and store the fonts we will
+    // use in the game.
+    let ttf_ctx = sdl2_ttf::init().unwrap();
+    let font_path = Path::new("assets/fonts/pixel.ttf");
+    let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
+
+    // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
+    // in the game.
+    let sdl_audio = sdl_ctx.audio().unwrap();
+    sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
+    let ping_sound_path = Path::new("assets/sounds/ping.wav");
+    let ping_sound = sdl2_mixer::Music::from_file(ping_sound_path).unwrap();
+    let pong_sound_path = Path::new("assets/sounds/pong.wav");
+    let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
+
+    // Package the media we will use later on in the UI type. 
+    let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound);
+
+    // Our ball will launch from the center of the screen.
+    let ball = Ball::new(Color::RGB(0xff, 0xcc, 0x00), 
+                         screen_width / 2., 
+                         screen_height / 2., 
+                         11., 
+                         500.,
+                         f32::consts::PI * 50. / 180.,
+                         f32::consts::PI * 45. / 180.); 
+    
+    
+    // Common ball properties.
+    let paddle_x_offset = 4.;
+    let paddle_width = 5.;
+    let paddle_height = 60.;
+    let paddle_initial_y = (screen_height - paddle_height) / 2.;
+    
+    // The left paddle starts in the left center of the screen and represents the human player.
+    let left_paddle = Paddle::new(Color::RGB(0xf6, 0xf4, 0xda), 
+                                  paddle_x_offset, 
+                                  paddle_initial_y,
+                                  paddle_width,
+                                  paddle_height,
+                                  0.); // There is no restriction on how fast the human may
+                                      // may move the paddle.
+
+    // The right paddle start in the right center of the screen and represents the computer
+    // player.
+    let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
+                                  screen_width - (paddle_x_offset + paddle_width), 
+                                  paddle_initial_y,
+                                  paddle_width,
+                                  paddle_height,
+                                  300.);
+    
+    // Assemble and return the game. We're ready to play!
+    return Game::new(ui,
+                     screen_background_color,
+                     screen_width,
+                     screen_height,
+                     Color::RGB(0xff, 0xff, 0xff),
+                     40,
+                     ball,
+                     left_paddle,
+                     right_paddle);
+
+}
+    
 fn main() {
-    let mut game = GameBuilder::new().build();
-    while true {
-        if !game.show_welcome_screen() {
-            return
-        }
-        game.start();
-        game.reset();
-    }
+    build().launch_then_block_until_exit();
 }
