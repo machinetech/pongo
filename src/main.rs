@@ -397,11 +397,19 @@ impl Game {
     /// Execute the game loop over and over again until the user quits or someone wins. 
     fn execute_game_loop(&mut self) {
 
+        // The running flag is stored as a game wide field. This allows the flag to be changed
+        // at any point in the game. A method checking for user input can thus set the flag to
+        // false when the user indicates they want to quit. The same goes for a method that checks
+        // whether someone has won.
         self.running = true;
         let mut time_last_invocation = clock_ticks::precise_time_ms();
 
         while self.running {
             let time_this_invocation = clock_ticks::precise_time_ms();
+
+            // The delta time in millis is used to measure the duration of frame execution
+            // so that we can update the screen based on the time that has elapsed since the last
+            // frame was rendered. It is also used to cap the frame rate.
             let dt_ms = time_this_invocation - time_last_invocation;
             let mut ctx = GameLoopContext::new(dt_ms as f32 / 1000.);
             self.execute_game_loop_iteration_per_frame(&mut ctx); 
@@ -413,16 +421,26 @@ impl Game {
     
     // Called once per frame. 
     fn execute_game_loop_iteration_per_frame(&mut self, ctx: &mut GameLoopContext) {
+
+        // Move objects. The left paddle is moved based on user input. 
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
+
+        // Draw objects.
         self.draw(ctx);
+
+        // Play audio.
         self.play_audio(ctx);
+
+        // End slow motion mode if duration has elapsed.
         if let Some(time_slow_motion_started_ms) = self.time_slow_motion_started_ms {
             if clock_ticks::precise_time_ms() - time_slow_motion_started_ms >= 5000 {
                 self.time_slow_motion_started_ms = None;
             }
         }
+
+        // Check to see if either the human (left paddle) or computer (right paddle) has won.
         self.check_for_win(ctx);
     }
     
@@ -448,6 +466,7 @@ impl Game {
                         let y = y as f32;
                         let mut lpaddle = self.lpaddle.borrow_mut();
                         lpaddle.y = y; 
+                        // Guard against moving up or down beyond the screen bounds.
                         if lpaddle.y < 0. { 
                             lpaddle.y = 0.; 
                         } else if lpaddle.y + lpaddle.height > self.height {
@@ -462,7 +481,7 @@ impl Game {
         ctx.layered_draw_queue[1].push(self.lpaddle.clone());
     }
 
-    // The game moves the right paddle. 
+    // The computer player moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
        
         let ball = self.ball.borrow();
@@ -470,7 +489,7 @@ impl Game {
 
         // If ball is moving toward the paddle, then track the ball. If the ball is moving away
         // from the paddle, then move toward the home position.
-        let tracking_y = if ball.vx > 0. { ball.y + ball.diameter / 2.  } else { self.height / 2. }; 
+        let tracking_y = if ball.vx > 0. {ball.y + ball.diameter / 2.} else {self.height / 2.}; 
 
         // We use non-overlapping segments of the paddle (3/4 vs 1/4) when deciding whether to move
         // the paddle up or down. Using the center of the paddle against the center of the ball is
@@ -515,16 +534,16 @@ impl Game {
         let mut lpaddle = self.lpaddle.borrow_mut();
         let mut rpaddle = self.rpaddle.borrow_mut();
         
-        // Calculate the tentative new ball coordinates based (before we take into account 
-        // travelling beyond the screen bounds or hitting a wall or paddle).
+        // Calculate the tentative new ball coordinates based on the time since the last movement
+        // and the current velocity of the ball. The new position is tentative since we still need
+        // to account for collisions... hitting a wall or paddle.
         let mut new_ball_x = ball.x + self.mod_speed(ball.vx, ball.speed_multiplier) * ctx.dt_sec;
         let mut new_ball_y = ball.y + self.mod_speed(ball.vy, ball.speed_multiplier) * ctx.dt_sec;
 
         // If the ball hit the top or bottom wall, then the angle of deflection will be equal
         // to the angle of incidence. Instead of calculating the angle and new x and y coordinates,
-        // we keep the x coordinate unchanged, but reverse the horizontal direction of the 
-        // distance travelled beyond the wall bounds. Next, we also reverse the horizontal
-        // velocity.
+        // we keep the x coordinate unchanged, but reverse the horizontal direction of the distance 
+        // travelled beyond the wall bounds. Next, we also reverse the horizontal velocity.
         if new_ball_y < 0. {
             new_ball_y = -new_ball_y;
             ball.vy = -ball.vy;
@@ -703,18 +722,28 @@ impl Game {
 
     fn draw_net(&mut self) {
 
-        let num_net_dots = 20;
-        let num_net_gaps = num_net_dots - 1;
-        let net_dot_width = 10.;
-        let net_dot_height = self.height / (num_net_dots + num_net_gaps) as f32;
+        let num_dots = 20;
+        let num_gaps = num_dots - 1;
+        let dot_width = 10.;
+        let dot_height = self.height / (num_dots + num_gaps) as f32;
 
-        for i in 0..num_net_dots + num_net_gaps + 1 {
-            let net_dot_x = self.width / 2. - net_dot_width / 2.;
-            let net_dot_y = i as f32 * net_dot_height; 
-            self.ui.renderer.set_draw_color(if i % 2 == 0 {self.net_color} else {self.background_color});
-            let net_dot_rect = Rect::new_unwrap(net_dot_x as i32, net_dot_y as i32, 
-                                                net_dot_width as u32, net_dot_height as u32);
-            self.ui.renderer.fill_rect(net_dot_rect);
+        for i in 0..num_dots + num_gaps + 1 {
+            
+            if i % 2 == 0 {
+
+                let dot_x = self.width / 2. - dot_width / 2.;
+                let dot_y = i as f32 * dot_height; 
+                self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
+
+                let dot_rect = Rect::new_unwrap(dot_x as i32, 
+                                                dot_y as i32, 
+                                                dot_width as u32, 
+                                                dot_height as u32);
+
+                self.ui.renderer.fill_rect(dot_rect);
+            
+            }
+
         }
 
     }
@@ -736,7 +765,7 @@ impl Game {
             msg = Option::Some("I win!");
         }
         
-        // We have a winner.
+        // There is a win message, therefore there is a winner. 
         if let Some(msg) = msg {
             self.running = false;
             self.ui.renderer.set_draw_color(self.background_color);
@@ -769,7 +798,7 @@ impl Game {
         let mut modified_speed = speed * speed_multiplier;
 
         match self.time_slow_motion_started_ms {
-            Some(time_slow_motion_started_ms) => {
+            Some(_) => {
                 modified_speed *= 0.5;
             },
             None => {}
@@ -795,10 +824,12 @@ impl Resettable for Game {
 
     fn reset(&mut self) {
 
+        // Reset slow motion status.
         self.time_ball_last_speedup_ms = Option::None;
         self.slow_motions_remaining = 3;
         self.time_slow_motion_started_ms = Option::None;
 
+        // Reset objects.
         for r in self.resettables.iter() {
             r.borrow_mut().reset();
         }
