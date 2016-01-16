@@ -85,8 +85,8 @@ struct Ball {
     color: Color,                   
     initial_x: f32,                 // The initial x location. Stored so that we can reset the ball.
     initial_y: f32,                 // The initial y location. Stored so that we can reset the ball.
-    x: f32,                         // x pixel co-ordinate of top left corner.
-    y: f32,                         // y pixel co-ordinate of top left corner.
+    x: f32,                         // x pixel coordinate of top left corner.
+    y: f32,                         // y pixel coordinate of top left corner.
     diameter: f32,                   
     speed: f32,                     // Speed in pixels per second. Never changes.
     speed_multiplier: f32,          // Used to adjust the speed.
@@ -184,8 +184,8 @@ struct Paddle {
     color: Color,   
     initial_x: f32,         // The initial x location. Stored so that we can reset the paddle.
     initial_y: f32,         // The initial y location. Stored so that we can reset the paddle.
-    x: f32,                 // x pixel co-ordinate of top left corner
-    y: f32,                 // y pixel co-ordinate of top left corner
+    x: f32,                 // x pixel coordinate of top left corner
+    y: f32,                 // y pixel coordinate of top left corner
     width: f32,     
     height: f32,    
     speed: f32,             // Speed in pixels per second. Never changes. 
@@ -254,6 +254,57 @@ impl Drawable for Paddle {
 
 }
 
+struct Net {
+    color: Color,   
+    x: f32,            // x pixel coordinate of top left corner  
+    dot_width: f32,
+    dot_height: f32,
+    num_dots: i32
+}
+
+impl Net {
+    
+    fn new(color: Color, x: f32, dot_width: f32, dot_height: f32, num_dots: i32) -> Net {
+    
+        return Net {
+            color: color,
+            x: x,
+            dot_width: dot_width,
+            dot_height: dot_height,
+            num_dots: num_dots
+        };
+    
+    }
+
+}
+
+impl Drawable for Net {
+
+    fn draw(&self, ui: &mut Ui) {
+        
+        let dot_x = self.x;
+        let num_gaps = self.num_dots - 1;
+
+        for i in 0..self.num_dots + num_gaps + 1 {
+            
+            if i % 2 == 0 {
+
+                let dot_y = i as f32 * self.dot_height; 
+                ui.renderer.set_draw_color(self.color);
+                let dot_rect = Rect::new_unwrap(dot_x as i32, 
+                                                dot_y as i32, 
+                                                self.dot_width as u32, 
+                                                self.dot_height as u32);
+
+                ui.renderer.fill_rect(dot_rect);
+            
+            }
+
+        }
+    
+    }
+}
+
 /// Holds state that lasts for a single iteration of the game loop.
 struct GameLoopContext {
 
@@ -283,8 +334,8 @@ struct Game {
     background_color: Color,
     width: f32,
     height: f32,
-    net_color: Color,
     fps: u32,
+    net: Rc<RefCell<Net>>,
     ball: Rc<RefCell<Ball>>,
     lpaddle: Rc<RefCell<Paddle>>,
     rpaddle: Rc<RefCell<Paddle>>,
@@ -303,8 +354,8 @@ impl Game {
            background_color: Color, 
            width: f32,
            height: f32,
-           net_color: Color,
            fps: u32, 
+           net: Net,
            ball: Ball, 
            lpaddle: Paddle, 
            rpaddle: Paddle) -> Game { 
@@ -314,8 +365,8 @@ impl Game {
             background_color: background_color,
             width: width,
             height: height,
-            net_color: net_color,
             fps: fps, 
+            net: Rc::new(RefCell::new(net)), 
             ball: Rc::new(RefCell::new(ball)), 
             lpaddle: Rc::new(RefCell::new(lpaddle)), 
             rpaddle: Rc::new(RefCell::new(rpaddle)), 
@@ -340,7 +391,7 @@ impl Game {
         self.ui.renderer.set_draw_color(self.background_color);
         self.ui.renderer.clear();
         let table_width = self.width;
-        self.show_msg("Pong", table_width / 4., 100., table_width / 2., 150., 
+        self.show_msg("Ping Pong", table_width / 4., 100., table_width / 2., 150., 
                       Color::RGB(0xff, 0xff, 0xff));
         self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
                       18., Color::RGB(0xff, 0xff, 0xff));
@@ -682,7 +733,7 @@ impl Game {
         //let rpaddle = self.rpaddle.borrow();
         //self.draw_score(rpaddle.score, rpaddle.color, self.width / 2. + 20., 5.);
         
-        self.draw_net();
+        ctx.layered_draw_queue[0].push(self.net.clone());
         for layer in ctx.layered_draw_queue.iter() {
             for d in layer.iter() {
                 d.borrow().draw(&mut self.ui);
@@ -718,34 +769,6 @@ impl Game {
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
         self.ui.renderer.copy(&texture, None, Some(target));
-    }
-
-    fn draw_net(&mut self) {
-
-        let num_dots = 20;
-        let num_gaps = num_dots - 1;
-        let dot_width = 10.;
-        let dot_height = self.height / (num_dots + num_gaps) as f32;
-
-        for i in 0..num_dots + num_gaps + 1 {
-            
-            if i % 2 == 0 {
-
-                let dot_x = self.width / 2. - dot_width / 2.;
-                let dot_y = i as f32 * dot_height; 
-                self.ui.renderer.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
-
-                let dot_rect = Rect::new_unwrap(dot_x as i32, 
-                                                dot_y as i32, 
-                                                dot_width as u32, 
-                                                dot_height as u32);
-
-                self.ui.renderer.fill_rect(dot_rect);
-            
-            }
-
-        }
-
     }
 
     fn play_audio(&mut self, ctx: &mut GameLoopContext) {
@@ -879,6 +902,13 @@ fn build() -> Game {
     // Package the media we will use later on in the UI type. 
     let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound);
 
+    // The net will run vertically across the center of the screen.
+    let net = Net::new(Color::RGB(0xff, 0xff, 0xff),
+                       screen_width / 2. - 10. / 2.,
+                       10.,
+                       screen_height / (2 * 20 - 1) as f32,
+                       20);
+
     // Our ball will launch from the center of the screen.
     let ball = Ball::new(Color::RGB(0xff, 0xcc, 0x00), 
                          screen_width / 2., 
@@ -918,8 +948,8 @@ fn build() -> Game {
                      screen_background_color,
                      screen_width,
                      screen_height,
-                     Color::RGB(0xff, 0xff, 0xff),
                      40,
+                     net,
                      ball,
                      left_paddle,
                      right_paddle);
