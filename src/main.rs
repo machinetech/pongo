@@ -34,7 +34,7 @@ struct Ui {
     sdl_ctx: Sdl,
     renderer: Renderer<'static>,
     ttf_ctx: Sdl2TtfContext,
-    pixel_font: Font,
+    pixel_font: Rc<Font>,
     sdl_audio: AudioSubsystem, 
     ping_sound: Rc<Music>,
     pong_sound: Rc<Music>
@@ -46,7 +46,7 @@ impl Ui {
     fn new(sdl_ctx: Sdl, 
            renderer: Renderer<'static>, 
            ttf_ctx: Sdl2TtfContext, 
-           pixel_font: Font,
+           pixel_font: Rc<Font>,
            sdl_audio: AudioSubsystem, 
            ping_sound: Music, 
            pong_sound: Music) -> Ui {
@@ -80,6 +80,117 @@ trait Resettable {
     fn reset(&mut self);
 }
 
+struct ScoreCard {
+   
+    color: Color,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    font: Rc<Font>,
+    score: i32
+    
+}
+
+impl ScoreCard {
+
+    fn new(color: Color, x: f32, y: f32, width: f32, height: f32, font: Rc<Font>) -> ScoreCard {
+    
+        return ScoreCard {
+            color: color,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            font: font,
+            score: 0 
+        };
+    
+    }
+
+}
+
+impl Drawable for ScoreCard {
+   
+    fn draw(&self, ui: &mut Ui) {
+
+        let formatted_score = format!("{:^3}", self.score);
+        let formatted_score_ref: &str = formatted_score.as_ref();
+        let surface = ui.pixel_font.render(formatted_score_ref, 
+                                           sdl2_ttf::blended(self.color)).unwrap();
+        let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let target = Rect::new_unwrap(self.x as i32, 
+                                      self.y as i32, 
+                                      self.width as u32, 
+                                      self.height as u32);
+        ui.renderer.copy(&texture, None, Some(target));
+    
+    } 
+
+}
+
+impl Resettable for ScoreCard {
+
+    fn reset(&mut self) {
+        self.score = 0;
+    }
+
+}
+
+struct Net {
+
+    color: Color,   
+    x: f32,            // x pixel coordinate of top left corner  
+    dot_width: f32,
+    dot_height: f32,
+    num_dots: i32
+
+}
+
+impl Net {
+    
+    fn new(color: Color, x: f32, dot_width: f32, dot_height: f32, num_dots: i32) -> Net {
+    
+        return Net {
+            color: color,
+            x: x,
+            dot_width: dot_width,
+            dot_height: dot_height,
+            num_dots: num_dots
+        };
+    
+    }
+
+}
+
+impl Drawable for Net {
+
+    fn draw(&self, ui: &mut Ui) {
+        
+        let dot_x = self.x;
+        let num_gaps = self.num_dots - 1;
+
+        for i in 0..self.num_dots + num_gaps + 1 {
+            
+            if i % 2 == 0 {
+
+                let dot_y = i as f32 * self.dot_height; 
+                ui.renderer.set_draw_color(self.color);
+                let dot_rect = Rect::new_unwrap(dot_x as i32, 
+                                                dot_y as i32, 
+                                                self.dot_width as u32, 
+                                                self.dot_height as u32);
+
+                ui.renderer.fill_rect(dot_rect);
+            
+            }
+
+        }
+    
+    }
+}
+
+// The ball is rendered as a circle, but treated as a square to simplify game mechanics. 
 struct Ball {
 
     color: Color,                   
@@ -189,8 +300,7 @@ struct Paddle {
     width: f32,     
     height: f32,    
     speed: f32,             // Speed in pixels per second. Never changes. 
-    speed_multiplier: f32,  // Used to adjust the speed.
-    score: u32              // Points won.              
+    speed_multiplier: f32   // Used to adjust the speed.
 
 }
 
@@ -212,8 +322,7 @@ impl Paddle {
             width: width, 
             height: height, 
             speed: speed,
-            speed_multiplier: 1.0,
-            score: 0
+            speed_multiplier: 1.0
         };
 
         paddle.reset();
@@ -234,8 +343,6 @@ impl Resettable for Paddle {
         // Revert to initial speed by setting the multiplier back to 1.
         self.speed_multiplier = 1.;
 
-        // Set the score back to zero.
-        self.score = 0;
     }
 
 }
@@ -252,57 +359,6 @@ impl Drawable for Paddle {
 
     }
 
-}
-
-struct Net {
-    color: Color,   
-    x: f32,            // x pixel coordinate of top left corner  
-    dot_width: f32,
-    dot_height: f32,
-    num_dots: i32
-}
-
-impl Net {
-    
-    fn new(color: Color, x: f32, dot_width: f32, dot_height: f32, num_dots: i32) -> Net {
-    
-        return Net {
-            color: color,
-            x: x,
-            dot_width: dot_width,
-            dot_height: dot_height,
-            num_dots: num_dots
-        };
-    
-    }
-
-}
-
-impl Drawable for Net {
-
-    fn draw(&self, ui: &mut Ui) {
-        
-        let dot_x = self.x;
-        let num_gaps = self.num_dots - 1;
-
-        for i in 0..self.num_dots + num_gaps + 1 {
-            
-            if i % 2 == 0 {
-
-                let dot_y = i as f32 * self.dot_height; 
-                ui.renderer.set_draw_color(self.color);
-                let dot_rect = Rect::new_unwrap(dot_x as i32, 
-                                                dot_y as i32, 
-                                                self.dot_width as u32, 
-                                                self.dot_height as u32);
-
-                ui.renderer.fill_rect(dot_rect);
-            
-            }
-
-        }
-    
-    }
 }
 
 /// Holds state that lasts for a single iteration of the game loop.
@@ -339,6 +395,8 @@ struct Game {
     ball: Rc<RefCell<Ball>>,
     lpaddle: Rc<RefCell<Paddle>>,
     rpaddle: Rc<RefCell<Paddle>>,
+    lscore_card: Rc<RefCell<ScoreCard>>,
+    rscore_card: Rc<RefCell<ScoreCard>>,
     time_ball_last_speedup_ms: Option<u64>,
     slow_motions_remaining: u32,
     time_slow_motion_started_ms: Option<u64>,
@@ -358,7 +416,9 @@ impl Game {
            net: Net,
            ball: Ball, 
            lpaddle: Paddle, 
-           rpaddle: Paddle) -> Game { 
+           rpaddle: Paddle,
+           lscore_card: ScoreCard,
+           rscore_card: ScoreCard) -> Game { 
         
         let mut game = Game { 
             ui: ui, 
@@ -370,6 +430,8 @@ impl Game {
             ball: Rc::new(RefCell::new(ball)), 
             lpaddle: Rc::new(RefCell::new(lpaddle)), 
             rpaddle: Rc::new(RefCell::new(rpaddle)), 
+            lscore_card: Rc::new(RefCell::new(lscore_card)), 
+            rscore_card: Rc::new(RefCell::new(rscore_card)), 
             time_ball_last_speedup_ms: Option::None,
             slow_motions_remaining: 3,
             time_slow_motion_started_ms: Option::None,
@@ -380,6 +442,8 @@ impl Game {
         game.resettables.push(game.ball.clone());
         game.resettables.push(game.lpaddle.clone());
         game.resettables.push(game.rpaddle.clone());
+        game.resettables.push(game.lscore_card.clone());
+        game.resettables.push(game.rscore_card.clone());
         game.reset();
 
         return game;
@@ -473,11 +537,16 @@ impl Game {
     // Called once per frame. 
     fn execute_game_loop_iteration_per_frame(&mut self, ctx: &mut GameLoopContext) {
 
+        
         // Move objects. The left paddle is moved based on user input. 
         self.move_ball(ctx);
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
 
+        // Check to see if either the human (left paddle) or computer (right paddle) has won.
+        // todo. fix check for win.
+        self.check_for_win(ctx);
+        
         // Draw objects.
         self.draw(ctx);
 
@@ -491,8 +560,6 @@ impl Game {
             }
         }
 
-        // Check to see if either the human (left paddle) or computer (right paddle) has won.
-        self.check_for_win(ctx);
     }
     
     // Move the left paddle based on user input. 
@@ -500,7 +567,7 @@ impl Game {
         match self.ui.poll_event() {
             Some(event) => {
                 match event {
-                    // Quit the game.
+                    // Quit the game and return back to the welcome screen.
                     Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         self.running = false;
                     },
@@ -656,8 +723,8 @@ impl Game {
 
         } else if new_ball_x + ball.diameter > rpaddle.x && ball.x + ball.diameter <= rpaddle.x {
             
-            // The logic around hitting the right paddle is very similar to that for hitting the
-            // left paddle.
+            // The logic around hitting the right paddle is essentially the same as that for 
+            // hitting the left paddle.
 
             let bounce_x = rpaddle.x - ball.diameter; 
             let bounce_y = (new_ball_y - ball.y) / (new_ball_x - ball.x) * (bounce_x - ball.x) + ball.y;
@@ -687,14 +754,14 @@ impl Game {
             new_ball_x = -new_ball_x;
             ball.vx = -ball.vx;
             // Right player scored.
-            rpaddle.score += 1;
+            self.rscore_card.borrow_mut().score += 1;
             ctx.audible_queue.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } else if new_ball_x + ball.diameter > self.width { 
             new_ball_x = self.width - (new_ball_x + ball.diameter - self.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
-            lpaddle.score += 1;
+            self.rscore_card.borrow_mut().score += 1;
             ctx.audible_queue.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } 
@@ -728,17 +795,18 @@ impl Game {
         self.ui.renderer.set_draw_color(self.background_color);
         self.ui.renderer.clear();
         
-        //let lpaddle = self.lpaddle.borrow();
-        //self.draw_score(lpaddle.score, lpaddle.color, self.width / 2. - 100., 5.);
-        //let rpaddle = self.rpaddle.borrow();
-        //self.draw_score(rpaddle.score, rpaddle.color, self.width / 2. + 20., 5.);
-        
         ctx.layered_draw_queue[0].push(self.net.clone());
+        ctx.layered_draw_queue[0].push(self.lscore_card.clone());
+        ctx.layered_draw_queue[0].push(self.rscore_card.clone());
+
+        // Higher layers are drawn on top of lower layers. Allows us to for instance, ensure the 
+        // ball passes over the top of the net instead of underneath it.
         for layer in ctx.layered_draw_queue.iter() {
             for d in layer.iter() {
                 d.borrow().draw(&mut self.ui);
             }
         }
+
         let mut png_texture = {
             let png_path = Path::new("assets/images/turtle.png");
             self.ui.renderer.load_texture(png_path).unwrap() 
@@ -762,15 +830,6 @@ impl Game {
         self.ui.renderer.present();
     }
 
-    fn draw_score(&mut self, score: u32, color: Color, x: f32, y: f32) {
-        let formatted_score = format!("{:^3}", score);
-        let formatted_score_ref: &str = formatted_score.as_ref();
-        let surface = self.ui.pixel_font.render(formatted_score_ref, sdl2_ttf::blended(color)).unwrap();
-        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(x as i32, y as i32, 80, 60);
-        self.ui.renderer.copy(&texture, None, Some(target));
-    }
-
     fn play_audio(&mut self, ctx: &mut GameLoopContext) {
         for a in ctx.audible_queue.iter() {
             a.play(1);
@@ -782,9 +841,9 @@ impl Game {
         let mut msg: Option<&str> = Option::None;
         let points_to_win = 5;
 
-        if self.lpaddle.borrow().score >= points_to_win {
+        if self.lscore_card.borrow().score >= points_to_win {
             msg = Option::Some("You win!");
-        } else if self.lpaddle.borrow().score >= points_to_win {
+        } else if self.rscore_card.borrow().score >= points_to_win {
             msg = Option::Some("I win!");
         }
         
@@ -798,6 +857,7 @@ impl Game {
             let color = Color::RGB(0xff, 0xff, 0xff);
             let width = self.width / 2.;
             let height = 60.;
+            // todo: draw on game screen.
             self.show_msg(msg, x, y, width, height, color);
             self.ui.renderer.present();
             thread::sleep_ms(1000);
@@ -888,7 +948,7 @@ fn build() -> Game {
     // use in the game.
     let ttf_ctx = sdl2_ttf::init().unwrap();
     let font_path = Path::new("assets/fonts/pixel.ttf");
-    let font = sdl2_ttf::Font::from_file(font_path, 128).unwrap();
+    let font = Rc::new(sdl2_ttf::Font::from_file(font_path, 128).unwrap());
 
     // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
     // in the game.
@@ -900,7 +960,7 @@ fn build() -> Game {
     let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
 
     // Package the media we will use later on in the UI type. 
-    let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font, sdl_audio, ping_sound, pong_sound);
+    let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font.clone(), sdl_audio, ping_sound, pong_sound);
 
     // The net will run vertically across the center of the screen.
     let net = Net::new(Color::RGB(0xff, 0xff, 0xff),
@@ -931,8 +991,8 @@ fn build() -> Game {
                                   paddle_initial_y,
                                   paddle_width,
                                   paddle_height,
-                                  0.); // There is no restriction on how fast the human may
-                                      // may move the paddle.
+                                  0.); // There is no restriction on how fast the human player may
+                                       // move the paddle.
 
     // The right paddle start in the right center of the screen and represents the computer
     // player.
@@ -942,7 +1002,28 @@ fn build() -> Game {
                                   paddle_width,
                                   paddle_height,
                                   300.);
-    
+  
+    let score_board_width = screen_width / 2. - 100.;
+    let score_board_height = 65.;
+    let score_board_x = screen_width / 2. - score_board_width / 2.;
+    let score_board_y = 5.;
+    let score_card_width = 80.;
+    let score_card_height = 60.;
+
+    let lscore_card = ScoreCard::new(Color::RGB(0xf6, 0xf4, 0xda),
+                                     score_board_x + 5.,
+                                     score_board_y + 5.,
+                                     score_card_width,
+                                     score_card_height,
+                                     font.clone());
+
+    let rscore_card = ScoreCard::new(Color::RGB(0xd9, 0xe2, 0xe1),
+                                     score_board_x + score_board_width - 5. - score_card_width,
+                                     score_board_y + 5.,
+                                     score_card_width,
+                                     score_card_height,
+                                     font.clone());
+
     // Assemble and return the game. We're ready to play!
     return Game::new(ui,
                      screen_background_color,
@@ -952,7 +1033,9 @@ fn build() -> Game {
                      net,
                      ball,
                      left_paddle,
-                     right_paddle);
+                     right_paddle,
+                     lscore_card,
+                     rscore_card);
 
 }
     
