@@ -18,7 +18,7 @@ use sdl2::render::{Renderer, Texture};
 use sdl2_gfx::primitives::DrawRenderer;
 use sdl2_image::{LoadTexture, INIT_PNG}; 
 use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Sdl2TtfContext}; 
+use sdl2_ttf::{Font, Hinting, Sdl2TtfContext}; 
 
 use std::cell::RefCell;
 use std::f32;
@@ -452,17 +452,24 @@ impl Game {
     
     /// Display welcome screen
     fn show_welcome_screen(&mut self) -> bool {
+        let music_path = Path::new("assets/sounds/more_monkey_island_band.wav");
+        let music = sdl2_mixer::Music::from_file(music_path).unwrap();
+        music.play(-1);
         self.ui.renderer.set_draw_color(self.background_color);
         self.ui.renderer.clear();
-        let table_width = self.width;
-        self.show_msg("Ping Pong", table_width / 4., 100., table_width / 2., 150., 
-                      Color::RGB(0xff, 0xff, 0xff));
-        self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
-                      18., Color::RGB(0xff, 0xff, 0xff));
-        self.show_msg("Click the mouse to slow down time", table_width / 4., 330., table_width / 2., 
-                      18., Color::RGB(0xff, 0xff, 0xff));
-        self.show_msg("Press any key to start!", table_width / 4., 400., table_width / 2., 
-                      50., Color::RGB(0xff, 0xff, 0xff));
+        
+        let font_path = Path::new("assets/fonts/djb_pokey_dots.ttf");
+        let mut font = sdl2_ttf::Font::from_file(font_path, 72).unwrap();
+        let (font_w, font_h) = font.size("P").unwrap(); 
+        let letter_x = self.width / 4.;
+        self.show_msg("P", letter_x, 100., font_w as f32, font_h as f32, 
+                      Color::RGB(0xff, 0xff, 0xff), &font);
+        //self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
+        //              18., Color::RGB(0xff, 0xff, 0xff));
+        //self.show_msg("Click the mouse to slow down time", table_width / 4., 330., table_width / 2., 
+        //              18., Color::RGB(0xff, 0xff, 0xff));
+        //self.show_msg("Press any key to start!", table_width / 4., 400., table_width / 2., 
+        //              50., Color::RGB(0xff, 0xff, 0xff));
         let mut start_game: Option<bool> = Option::None;
         self.ui.renderer.present();
         while start_game.is_none() {
@@ -484,6 +491,7 @@ impl Game {
                 None => {}
             }
         }
+        sdl2_mixer::Music::halt();
         return start_game.unwrap();
     }
 
@@ -543,9 +551,6 @@ impl Game {
         self.move_left_paddle(ctx);
         self.move_right_paddle(ctx);
 
-        // Check to see if either the human (left paddle) or computer (right paddle) has won.
-        // todo. fix check for win.
-        self.check_for_win(ctx);
         
         // Draw objects.
         self.draw(ctx);
@@ -560,6 +565,9 @@ impl Game {
             }
         }
 
+        // Check to see if either the human (left paddle) or computer (right paddle) has won.
+        // todo. fix check for win.
+        self.check_for_win(ctx);
     }
     
     // Move the left paddle based on user input. 
@@ -761,7 +769,7 @@ impl Game {
             new_ball_x = self.width - (new_ball_x + ball.diameter - self.width) - ball.diameter;
             ball.vx = -ball.vx;
             // Left player scored.
-            self.rscore_card.borrow_mut().score += 1;
+            self.lscore_card.borrow_mut().score += 1;
             ctx.audible_queue.push(self.ui.ping_sound.clone()); 
             bounce_that_allows_speedup = true;
         } 
@@ -858,16 +866,17 @@ impl Game {
             let width = self.width / 2.;
             let height = 60.;
             // todo: draw on game screen.
-            self.show_msg(msg, x, y, width, height, color);
+            //self.show_msg(msg, x, y, width, height, color, &self.ui.pixel_font);
             self.ui.renderer.present();
             thread::sleep_ms(1000);
         }
 
     }
 
-    fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color) {
+    fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color, 
+                font: &Font) {
 
-        let surface = self.ui.pixel_font.render(msg, sdl2_ttf::blended(color)).unwrap();
+        let surface = font.render(msg, sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
         self.ui.renderer.copy(&texture, None, Some(target));
@@ -932,7 +941,7 @@ fn build() -> Game {
     // Initialize SDL and capture the window renderer for later use. 
     let sdl_ctx = sdl2::init().unwrap();
     let video_subsystem = sdl_ctx.video().unwrap();
-    let window = video_subsystem.window("pong", screen_width as u32, screen_height as u32)
+    let window = video_subsystem.window("pongo", screen_width as u32, screen_height as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -985,7 +994,8 @@ fn build() -> Game {
     let paddle_height = 60.;
     let paddle_initial_y = (screen_height - paddle_height) / 2.;
     
-    // The left paddle starts in the left center of the screen and represents the human player.
+    // The left paddle starts in the left center of the screen and is controlled by the human
+    // player.
     let left_paddle = Paddle::new(Color::RGB(0xf6, 0xf4, 0xda), 
                                   paddle_x_offset, 
                                   paddle_initial_y,
@@ -994,8 +1004,8 @@ fn build() -> Game {
                                   0.); // There is no restriction on how fast the human player may
                                        // move the paddle.
 
-    // The right paddle start in the right center of the screen and represents the computer
-    // player.
+    // The right paddle start in the right center of the screen and is controlled by the computer
+    // palyer.
     let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
                                   screen_width - (paddle_x_offset + paddle_width), 
                                   paddle_initial_y,
@@ -1042,3 +1052,4 @@ fn build() -> Game {
 fn main() {
     build().launch_then_block_until_exit();
 }
+
