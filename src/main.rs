@@ -452,18 +452,68 @@ impl Game {
     
     /// Display welcome screen
     fn show_welcome_screen(&mut self) -> bool {
+
+        // Play music in the background.
         let music_path = Path::new("assets/sounds/more_monkey_island_band.wav");
         let music = sdl2_mixer::Music::from_file(music_path).unwrap();
         music.play(-1);
+        
+        // Draw background.
         self.ui.renderer.set_draw_color(self.background_color);
         self.ui.renderer.clear();
         
-        let font_path = Path::new("assets/fonts/djb_pokey_dots.ttf");
-        let mut font = sdl2_ttf::Font::from_file(font_path, 72).unwrap();
-        let (font_w, font_h) = font.size("P").unwrap(); 
-        let letter_x = self.width / 4.;
-        self.show_msg("P", letter_x, 100., font_w as f32, font_h as f32, 
-                      Color::RGB(0xff, 0xff, 0xff), &font);
+        // Draw game title.
+        let title_font_path = Path::new("assets/fonts/djb_pokey_dots.ttf");
+        let title_font = sdl2_ttf::Font::from_file(title_font_path, 72).unwrap();
+        let mut title_x = self.width / 2. - 95. - 95. -47.;
+        let title_y = 100.;
+        self.draw_text(&title_font, "P", Color::RGB(0x03, 0x91, 0xcf), title_x, title_y);
+        title_x += 95.;
+        self.draw_text(&title_font, "O", Color::RGB(0xf6, 0x77, 0x34), title_x, title_y);
+        title_x += 95.;
+        self.draw_text(&title_font, "N", Color::RGB(0xfc, 0xef, 0x6d), title_x, title_y);
+        title_x += 95.;
+        self.draw_text(&title_font, "G", Color::RGB(0x6f, 0xc3, 0x2d), title_x, title_y);
+        title_x += 95.;
+        self.draw_text(&title_font, "O", Color::RGB(0xf0, 0x3b, 0x32), title_x, title_y);
+       
+        // Draw instructions. 
+        let instruction_font_path = Path::new("assets/fonts/coffee_time.ttf");
+        let instruction_font = sdl2_ttf::Font::from_file(instruction_font_path, 26).unwrap();
+        let mut instruction_x = self.width / 2. - 205.;
+        let mut instruction_y = 250.;
+        let mut instruction = "Move the left paddle with the mouse...";
+        self.draw_text(&instruction_font, instruction, Color::RGB(0xff, 0xff, 0xff), 
+                       instruction_x, instruction_y);
+        instruction_x = self.width / 2. - 220.;
+        instruction_y = 300.;
+        instruction = "Left click the mouse to slow down time...";
+        self.draw_text(&instruction_font, instruction, Color::RGB(0xff, 0xff, 0xff), 
+                       instruction_x, instruction_y);
+
+        // Press any key to start. 
+        let start_font_path = Path::new("assets/fonts/kghappysolid.ttf");
+        let start_font = sdl2_ttf::Font::from_file(start_font_path, 39).unwrap();
+        let mut start_x = self.width / 2. - 280.;
+        let mut start_y = 380.;
+        let mut start = "PRESS ANY KEY TO START!";
+        self.draw_text(&start_font, start, Color::RGB(0xec, 0x42, 0x35), 
+                       start_x, start_y);
+        
+        // Draw credits. 
+        let credit_font_path = Path::new("assets/fonts/kg_cold_coffee.ttf");
+        let credit_font = sdl2_ttf::Font::from_file(credit_font_path, 12).unwrap();
+        let mut credit_x = self.width / 2. - 130.;
+        let mut credit_y = 500.;
+        let mut credit = "Programming by Wickus Martin";
+        self.draw_text(&credit_font, credit, Color::RGB(0xff, 0xff, 0xff), 
+                       credit_x, credit_y);
+        let mut credit_x = self.width / 2. - 90.;
+        let mut credit_y = 530.;
+        let mut credit = "Music by Eric Matyas";
+        self.draw_text(&credit_font, credit, Color::RGB(0xff, 0xff, 0xff), 
+                       credit_x, credit_y);
+        //
         //self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
         //              18., Color::RGB(0xff, 0xff, 0xff));
         //self.show_msg("Click the mouse to slow down time", table_width / 4., 330., table_width / 2., 
@@ -493,6 +543,14 @@ impl Game {
         }
         sdl2_mixer::Music::halt();
         return start_game.unwrap();
+    }
+
+    fn draw_text(&mut self, font: &Font, text: &str, color: Color, x: f32, y: f32) {
+        let surface = font.render(text, sdl2_ttf::blended(color)).unwrap();
+        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
+        let (width, height) = font.size(text).unwrap(); 
+        let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
+        self.ui.renderer.copy(&texture, None, Some(target));
     }
 
     /// Entry point into the game. Handles transition between showing the welcome screen, running
@@ -996,7 +1054,7 @@ fn build() -> Game {
     
     // The left paddle starts in the left center of the screen and is controlled by the human
     // player.
-    let left_paddle = Paddle::new(Color::RGB(0xf6, 0xf4, 0xda), 
+    let left_paddle = Paddle::new(Color::RGB(0x3b, 0xb1, 0x5d), 
                                   paddle_x_offset, 
                                   paddle_initial_y,
                                   paddle_width,
@@ -1006,7 +1064,7 @@ fn build() -> Game {
 
     // The right paddle start in the right center of the screen and is controlled by the computer
     // palyer.
-    let right_paddle = Paddle::new(Color::RGB(0xd9, 0xe2, 0xe1), 
+    let right_paddle = Paddle::new(Color::RGB(0xeb, 0x4e, 0x3d), 
                                   screen_width - (paddle_x_offset + paddle_width), 
                                   paddle_initial_y,
                                   paddle_width,
@@ -1020,14 +1078,14 @@ fn build() -> Game {
     let score_card_width = 80.;
     let score_card_height = 60.;
 
-    let lscore_card = ScoreCard::new(Color::RGB(0xf6, 0xf4, 0xda),
+    let lscore_card = ScoreCard::new(Color::RGB(0x3b, 0xb1, 0x5d),
                                      score_board_x + 5.,
                                      score_board_y + 5.,
                                      score_card_width,
                                      score_card_height,
                                      font.clone());
 
-    let rscore_card = ScoreCard::new(Color::RGB(0xd9, 0xe2, 0xe1),
+    let rscore_card = ScoreCard::new(Color::RGB(0xeb, 0x4e, 0x3d),
                                      score_board_x + score_board_width - 5. - score_card_width,
                                      score_board_y + 5.,
                                      score_card_width,
