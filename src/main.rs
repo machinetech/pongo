@@ -450,7 +450,8 @@ impl Game {
 
     }
     
-    /// Display welcome screen
+    /// Display welcome screen containing title, game instructions and credits while playing
+    /// funky music. The music stops when the game starts. 
     fn show_welcome_screen(&mut self) -> bool {
 
         // Play music in the background.
@@ -480,46 +481,25 @@ impl Game {
         // Draw instructions. 
         let instruction_font_path = Path::new("assets/fonts/coffee_time.ttf");
         let instruction_font = sdl2_ttf::Font::from_file(instruction_font_path, 26).unwrap();
-        let mut instruction_x = self.width / 2. - 205.;
-        let mut instruction_y = 250.;
-        let mut instruction = "Move the left paddle with the mouse...";
-        self.draw_text(&instruction_font, instruction, Color::RGB(0xff, 0xff, 0xff), 
-                       instruction_x, instruction_y);
-        instruction_x = self.width / 2. - 220.;
-        instruction_y = 300.;
-        instruction = "Left click the mouse to slow down time...";
-        self.draw_text(&instruction_font, instruction, Color::RGB(0xff, 0xff, 0xff), 
-                       instruction_x, instruction_y);
+        self.draw_centered_text(&instruction_font, "Move the left paddle with the mouse...", 
+                                Color::RGB(0xff, 0xff, 0xff), 250.);
+        self.draw_centered_text(&instruction_font, "Left click the mouse to slow down time...", 
+                       Color::RGB(0xff, 0xff, 0xff), 300.);
 
         // Press any key to start. 
         let start_font_path = Path::new("assets/fonts/kghappysolid.ttf");
         let start_font = sdl2_ttf::Font::from_file(start_font_path, 39).unwrap();
-        let mut start_x = self.width / 2. - 280.;
-        let mut start_y = 380.;
-        let mut start = "PRESS ANY KEY TO START!";
-        self.draw_text(&start_font, start, Color::RGB(0xec, 0x42, 0x35), 
-                       start_x, start_y);
+        self.draw_centered_text(&start_font, "PRESS ANY KEY TO START!", 
+                                Color::RGB(0xec, 0x42, 0x35), 380.);
         
         // Draw credits. 
         let credit_font_path = Path::new("assets/fonts/kg_cold_coffee.ttf");
         let credit_font = sdl2_ttf::Font::from_file(credit_font_path, 12).unwrap();
-        let mut credit_x = self.width / 2. - 130.;
-        let mut credit_y = 500.;
-        let mut credit = "Programming by Wickus Martin";
-        self.draw_text(&credit_font, credit, Color::RGB(0xff, 0xff, 0xff), 
-                       credit_x, credit_y);
-        let mut credit_x = self.width / 2. - 90.;
-        let mut credit_y = 530.;
-        let mut credit = "Music by Eric Matyas";
-        self.draw_text(&credit_font, credit, Color::RGB(0xff, 0xff, 0xff), 
-                       credit_x, credit_y);
-        //
-        //self.show_msg("Move the left paddle with the mouse", table_width / 4., 300., table_width / 2., 
-        //              18., Color::RGB(0xff, 0xff, 0xff));
-        //self.show_msg("Click the mouse to slow down time", table_width / 4., 330., table_width / 2., 
-        //              18., Color::RGB(0xff, 0xff, 0xff));
-        //self.show_msg("Press any key to start!", table_width / 4., 400., table_width / 2., 
-        //              50., Color::RGB(0xff, 0xff, 0xff));
+        self.draw_centered_text(&credit_font, "Programming by Wickus Martin", 
+                                Color::RGB(0xff, 0xff, 0xff), 500.);
+        self.draw_centered_text(&credit_font, "Music by Eric Matyas", 
+                                Color::RGB(0xff, 0xff, 0xff), 530.);
+
         let mut start_game: Option<bool> = Option::None;
         self.ui.renderer.present();
         while start_game.is_none() {
@@ -545,6 +525,17 @@ impl Game {
         return start_game.unwrap();
     }
 
+    /// Draw text to the screen. The width and height are calculated from the font supplied.
+    /// The position is specified as a top y location only. The x location is calculated
+    /// so that the text centers on the screen.
+    fn draw_centered_text(&mut self, font: &Font, text: &str, color: Color, y: f32) {
+        let (width, _) = font.size(text).unwrap(); 
+        let x = self.width / 2. - (width as f32) / 2.;
+        self.draw_text(font, text, color, x, y);
+    }
+
+
+    /// Draw text to the screen. The width and height are calculated from the font supplied.
     fn draw_text(&mut self, font: &Font, text: &str, color: Color, x: f32, y: f32) {
         let surface = font.render(text, sdl2_ttf::blended(color)).unwrap();
         let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
@@ -600,7 +591,7 @@ impl Game {
 
     }
     
-    // Called once per frame. 
+    /// Called once per frame. Essentially, an iteration of the game loop. 
     fn execute_game_loop_iteration_per_frame(&mut self, ctx: &mut GameLoopContext) {
 
         
@@ -628,7 +619,7 @@ impl Game {
         self.check_for_win(ctx);
     }
     
-    // Move the left paddle based on user input. 
+    /// Move the left paddle based on user input. 
     fn move_left_paddle(&mut self, ctx: &mut GameLoopContext) {
         match self.ui.poll_event() {
             Some(event) => {
@@ -665,7 +656,7 @@ impl Game {
         ctx.layered_draw_queue[1].push(self.lpaddle.clone());
     }
 
-    // The computer player moves the right paddle. 
+    /// The computer player moves the right paddle. 
     fn move_right_paddle(&mut self, ctx: &mut GameLoopContext) {
        
         let ball = self.ball.borrow();
@@ -711,7 +702,7 @@ impl Game {
 
     }
         
-    // Move the ball and deal with collisions. 
+    /// Move the ball and deal with collisions. 
     fn move_ball(&mut self, ctx: &mut GameLoopContext) {
 
         let mut ball = self.ball.borrow_mut(); 
@@ -924,20 +915,9 @@ impl Game {
             let width = self.width / 2.;
             let height = 60.;
             // todo: draw on game screen.
-            //self.show_msg(msg, x, y, width, height, color, &self.ui.pixel_font);
             self.ui.renderer.present();
             thread::sleep_ms(1000);
         }
-
-    }
-
-    fn show_msg(&mut self, msg: &str, x: f32, y: f32, width: f32, height: f32, color: Color, 
-                font: &Font) {
-
-        let surface = font.render(msg, sdl2_ttf::blended(color)).unwrap();
-        let texture = self.ui.renderer.create_texture_from_surface(&surface).unwrap();
-        let target = Rect::new_unwrap(x as i32, y as i32, width as u32, height as u32);
-        self.ui.renderer.copy(&texture, None, Some(target));
 
     }
 
@@ -1054,7 +1034,7 @@ fn build() -> Game {
     
     // The left paddle starts in the left center of the screen and is controlled by the human
     // player.
-    let left_paddle = Paddle::new(Color::RGB(0x3b, 0xb1, 0x5d), 
+    let left_paddle = Paddle::new(Color::RGB(0x03, 0x91, 0xcf), 
                                   paddle_x_offset, 
                                   paddle_initial_y,
                                   paddle_width,
@@ -1078,7 +1058,7 @@ fn build() -> Game {
     let score_card_width = 80.;
     let score_card_height = 60.;
 
-    let lscore_card = ScoreCard::new(Color::RGB(0x3b, 0xb1, 0x5d),
+    let lscore_card = ScoreCard::new(Color::RGB(0x03, 0x91, 0xcf),
                                      score_board_x + 5.,
                                      score_board_y + 5.,
                                      score_card_width,
