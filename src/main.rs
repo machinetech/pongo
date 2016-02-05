@@ -870,12 +870,12 @@ impl Game {
         let w = 15;
         for i in 0..3 {
             if i < self.slow_motions_remaining {
-                match self.lpaddle.borrow().color {
+                match Color::RGB(0x6f, 0xc3, 0x2d) {
                     Color::RGB(r,g,b) => png_texture.set_color_mod(r,g,b),
                     _ => {}
                 }
             } else {
-                png_texture.set_color_mod(0x69,0x69,0x69);
+                png_texture.set_color_mod(0x69, 0x69, 0x69);
             }
             let target = Rect::new_unwrap(x, y, w, 20);
             self.ui.renderer.copy(&png_texture, None, Some(target));
@@ -906,12 +906,11 @@ impl Game {
             self.running = false;
             self.ui.renderer.set_draw_color(self.background_color);
             self.ui.renderer.clear();
-            let x = self.width /2. /2.;
-            let y = self.height /2. - 100.;
-            let color = Color::RGB(0xff, 0xff, 0xff);
-            let width = self.width / 2.;
-            let height = 60.;
-            // todo: draw on game screen.
+            let font_path = Path::new("assets/fonts/kghappysolid.ttf");
+            let font = sdl2_ttf::Font::from_file(font_path, 60).unwrap();
+            let (_, height) = font.size(msg).unwrap();
+            let y = self.height / 2. - (height as f32) / 2.;
+            self.draw_centered_text(&font, msg, Color::RGB(0xfc, 0xef, 0x6d), y);
             self.ui.renderer.present();
             thread::sleep_ms(1000);
         }
