@@ -912,7 +912,7 @@ impl Game {
             let y = self.height / 2. - (height as f32) / 2.;
             self.draw_centered_text(&font, msg, Color::RGB(0xfc, 0xef, 0x6d), y);
             self.ui.renderer.present();
-            thread::sleep_ms(1000);
+            thread::sleep_ms(1500);
         }
 
     }
