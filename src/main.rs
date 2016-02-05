@@ -34,7 +34,6 @@ struct Ui {
     sdl_ctx: Sdl,
     renderer: Renderer<'static>,
     ttf_ctx: Sdl2TtfContext,
-    pixel_font: Rc<Font>,
     sdl_audio: AudioSubsystem, 
     ping_sound: Rc<Music>,
     pong_sound: Rc<Music>
@@ -46,7 +45,6 @@ impl Ui {
     fn new(sdl_ctx: Sdl, 
            renderer: Renderer<'static>, 
            ttf_ctx: Sdl2TtfContext, 
-           pixel_font: Rc<Font>,
            sdl_audio: AudioSubsystem, 
            ping_sound: Music, 
            pong_sound: Music) -> Ui {
@@ -55,7 +53,6 @@ impl Ui {
             sdl_ctx: sdl_ctx, 
             renderer: renderer,
             ttf_ctx: ttf_ctx,
-            pixel_font: pixel_font,
             sdl_audio: sdl_audio,
             ping_sound: Rc::new(ping_sound),
             pong_sound: Rc::new(pong_sound)
@@ -116,7 +113,7 @@ impl Drawable for ScoreCard {
 
         let formatted_score = format!("{:^3}", self.score);
         let formatted_score_ref: &str = formatted_score.as_ref();
-        let surface = ui.pixel_font.render(formatted_score_ref, 
+        let surface = self.font.render(formatted_score_ref, 
                                            sdl2_ttf::blended(self.color)).unwrap();
         let texture = ui.renderer.create_texture_from_surface(&surface).unwrap();
         let target = Rect::new_unwrap(self.x as i32, 
@@ -991,11 +988,8 @@ fn build() -> Game {
     // Initialize sdl_image for PNG image rendering. 
     sdl2_image::init(INIT_PNG);
     
-    // Initialize sdl_ttf for true type font rendering, then load and store the fonts we will
-    // use in the game.
+    // Initialize sdl_ttf for true type font rendering.
     let ttf_ctx = sdl2_ttf::init().unwrap();
-    let font_path = Path::new("assets/fonts/pixel.ttf");
-    let font = Rc::new(sdl2_ttf::Font::from_file(font_path, 128).unwrap());
 
     // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
     // in the game.
@@ -1007,7 +1001,7 @@ fn build() -> Game {
     let pong_sound = sdl2_mixer::Music::from_file(pong_sound_path).unwrap();
 
     // Package the media we will use later on in the UI type. 
-    let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, font.clone(), sdl_audio, ping_sound, pong_sound);
+    let ui = Ui::new(sdl_ctx, renderer, ttf_ctx, sdl_audio, ping_sound, pong_sound);
 
     // The net will run vertically across the center of the screen.
     let net = Net::new(Color::RGB(0xff, 0xff, 0xff),
@@ -1051,6 +1045,8 @@ fn build() -> Game {
                                   paddle_height,
                                   300.);
   
+    let font_path = Path::new("assets/fonts/pixel.ttf");
+    let font = Rc::new(sdl2_ttf::Font::from_file(font_path, 128).unwrap());
     let score_board_width = screen_width / 2. - 100.;
     let score_board_height = 65.;
     let score_board_x = screen_width / 2. - score_board_width / 2.;
