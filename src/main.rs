@@ -452,7 +452,7 @@ impl Game {
     fn show_welcome_screen(&mut self) -> bool {
 
         // Play music in the background.
-        let music_path = Path::new("assets/sounds/more_monkey_island_band.mp3");
+        let music_path = Path::new("assets/sounds/more_monkey_island_band.wav");
         let music = sdl2_mixer::Music::from_file(music_path).unwrap();
         music.play(-1);
         
