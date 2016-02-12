@@ -792,7 +792,7 @@ impl Game {
                 let bounce_dt_sec = ctx.dt_sec * (new_ball_y - bounce_y) / (new_ball_y - ball.y);
                 new_ball_x = bounce_x + ball.vx * bounce_dt_sec;
                 new_ball_y = bounce_y + ball.vy * bounce_dt_sec;
-                ctx.audible_queue.push(self.ui.ping_sound.clone()); 
+                ctx.audible_queue.push(self.ui.pong_sound.clone()); 
 
                 // May speedup after hitting the right paddle.
                 bounce_that_allows_speedup = true;
@@ -982,7 +982,7 @@ fn build() -> Game {
     let renderer = window.renderer().build().unwrap();
     
     //sdl_ctx.mouse().set_relative_mouse_mode(true);
-    //sdl_ctx.mouse().show_cursor(false);
+    sdl_ctx.mouse().show_cursor(false);
 
     // Initialize sdl_image for PNG image rendering. 
     sdl2_image::init(INIT_PNG);

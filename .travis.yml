@@ -1,0 +1,14 @@
+language: rust
+    
+env:
+    global:
+        - LD_LIBRARY_PATH: /usr/local/lib
+
+install:
+    - sudo add-apt-repository ppa:team-xbmc/ppa -y
+    - sudo apt-get update -q
+    - sudo apt-get install libsdl2-dev 
+    - sudo apt-get install libsdl2-gfx-dev
+    - sudo apt-get install libsdl2-image-dev
+    - sudo apt-get install libsdl2-mixer-dev 
+    - sudo apt-get install libsdl2-ttf-dev
