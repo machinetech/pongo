@@ -4,12 +4,14 @@ env:
     global:
         - LD_LIBRARY_PATH: /usr/local/lib
 
+before_install:
+    - uname -a
+    - lsb_release -a
+    - sudo apt-add-repository --yes ppa:zoogie/sdl2-snapshots       # libsdl2
+
 install:
-    - sudo add-apt-repository ppa:team-xbmc/ppa -y
-    - sudo apt-get update -q
-    - sudo apt-get install libsdl2-dev 
-    - sudo apt-get install libsdl2-gfx-dev
-    - sudo apt-get install libsdl2-image-dev
-    - sudo apt-get install libsdl2-mixer-dev 
-    - sudo apt-get install libsdl2-ttf-dev
-#
+    - sudo apt-get install -y libsdl2-dev 
+    - sudo apt-get install -y libsdl2-gfx-dev
+    - sudo apt-get install -y libsdl2-image-dev
+    - sudo apt-get install -y libsdl2-mixer-dev 
+    - sudo apt-get install -y libsdl2-ttf-dev
