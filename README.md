@@ -1,7 +1,5 @@
 # Pongo [![Build Status](https://travis-ci.org/wickus/pongo.svg?branch=master)](https://travis-ci.org/wickus/chip8)
 
-[Status: Game works, but Travis build misconfigured plus Readme in draft state.]
-
 A Pong clone written in the [Rust](http://www.rust-lang.org/) programming language. The project uses the [MIT](https://github.com/wickus/pongo/blob/master/LICENSE) license.
 
 [![Pongo](http://wickus.github.io/pongo/images/title.png)](https://youtu.be/VgHv11kGtdQ)
