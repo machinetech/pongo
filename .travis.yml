@@ -7,11 +7,12 @@ env:
 before_install:
     - uname -a
     - lsb_release -a
+    - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test 
     - sudo apt-add-repository --yes ppa:zoogie/sdl2-snapshots       # libsdl2
 
 install:
-    - sudo apt-get install -y libsdl2-dev 
-    - sudo apt-get install -y libsdl2-gfx-dev
-    - sudo apt-get install -y libsdl2-image-dev
-    - sudo apt-get install -y libsdl2-mixer-dev 
-    - sudo apt-get install -y libsdl2-ttf-dev
+    - sudo apt-get install --yes libsdl2 
+    - sudo apt-get install --yes libsdl2-gfx
+    - sudo apt-get install --yes libsdl2-image
+    - sudo apt-get install --yes libsdl2-mixer 
+    - sudo apt-get install --yes libsdl2-ttf
