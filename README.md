@@ -1,4 +1,4 @@
-# Pongo [![Build Status](https://travis-ci.org/wickus/chip8.svg)](https://travis-ci.org/wickus/chip8)
+# Pongo [![Build Status](https://travis-ci.org/wickus/pongo.svg?branch=master)](https://travis-ci.org/wickus/chip8)
 
 [Status: Game works, but Travis build misconfigured plus Readme in draft state.]
 
@@ -21,14 +21,22 @@ The game uses the cross platform media library [SDL2](https://www.libsdl.org/) f
 **Ubuntu**:  
 
 ```
-sudo apt-get install libsdl2-dev
+sudo apt-get install libsdl2
+sudo apt-get install libsdl2-gfx
+sudo apt-get install libsdl2-image
+sudo apt-get install libsdl2-mixer
+sudo apt-get install libsdl2-ttf
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
 ```
 
 **HomeBrew**:  
 
 ```
-brew install sdl2  
+brew install sdl2
+brew install sdl2-gfx
+brew install sdl2-image
+brew install sdl2-mixer
+brew install sdl2-ttf
 export LIBRARY_PATH="${LIBRARY_PATH}:/usr/local/lib"
 ```
 
