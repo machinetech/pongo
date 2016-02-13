@@ -21,11 +21,11 @@ The game uses the cross platform media library [SDL2](https://www.libsdl.org/) f
 **Ubuntu**:  
 
 ```
-sudo apt-get install libsdl2
-sudo apt-get install libsdl2-gfx
-sudo apt-get install libsdl2-image
-sudo apt-get install libsdl2-mixer
-sudo apt-get install libsdl2-ttf
+sudo apt-get install libsdl2-dev
+sudo apt-get install libsdl2-gfx-dev
+sudo apt-get install libsdl2-image-dev
+sudo apt-get install libsdl2-mixer-dev
+sudo apt-get install libsdl2-ttf-dev
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
 ```
 
