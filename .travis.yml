@@ -11,8 +11,19 @@ before_install:
     - lsb_release -a
 
 install:
-    - sudo apt-get install --yes libsdl2-dev 
-    - sudo apt-get install --yes libsdl2-gfx-dev
-    - sudo apt-get install --yes libsdl2-image-dev
-    - sudo apt-get install --yes libsdl2-mixer-dev
-    - sudo apt-get install --yes libsdl2-ttf-dev
+    - cd ..
+    - time wget -q http://www.libsdl.org/release/SDL2-2.0.3.tar.gz
+    - time wget -q http://iweb.dl.sourceforge.net/project/sdl2gfx/SDL2_gfx-1.0.0.tar.gz
+    - time tar xf SDL2-*.tar.gz
+    - time tar xf SDL2_gfx-*.tar.gz
+    - cd SDL2-*
+    - ./configure && make && sudo make install
+    - cd -
+    - cd SDL2_gfx-*
+    - ./configure && make && sudo make install
+    - cd -
+
+script:
+    - cd pongo 
+    - cargo build -v
+
