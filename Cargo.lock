@@ -1,6 +1,6 @@
 [root]
-name = "pong"
-version = "0.0.1"
+name = "pongo"
+version = "1.0.0"
 dependencies = [
  "clock_ticks 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.11 (registry+https://github.com/rust-lang/crates.io-index)",

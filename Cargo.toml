@@ -1,13 +1,13 @@
 [package]
-name = "pong"
+name = "pongo"
 description = "A Pong clone written in Rust"
-version = "0.0.1"
+version = "1.0.0"
 license = "MIT"
 authors = ["wickus.martin <wickus.martin@gmail.com>"]
 keywords = ["pong"]
 
 [[bin]]
-name = "pong"
+name = "pongo"
 path = "src/main.rs"
 
 [dependencies]
