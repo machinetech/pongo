@@ -115,7 +115,7 @@ impl Game {
         // Play music in the background.
         let music_path = Path::new("assets/sounds/more_monkey_island_band.wav");
         let music = sdl2_mixer::Music::from_file(music_path).unwrap();
-        music.play(-1);
+        let _ = music.play(-1);
         
         // Draw background.
         self.ui.renderer.set_draw_color(self.background_color);
@@ -353,7 +353,7 @@ impl Game {
     /// Move the ball and deal with collisions. 
     fn move_ball(&mut self, ctx: &mut GameLoopContext) {
         let mut ball = self.ball.borrow_mut(); 
-        let mut lpaddle = self.lpaddle.borrow_mut();
+        let lpaddle = self.lpaddle.borrow_mut();
         let mut rpaddle = self.rpaddle.borrow_mut();
         
         // Calculate the tentative new ball coordinates based on the time since the last movement
@@ -533,7 +533,7 @@ impl Game {
 
     fn play_audio(&mut self, ctx: &mut GameLoopContext) {
         for a in ctx.audible_queue.iter() {
-            a.play(1);
+            let _ = a.play(1);
         }
     }
 

@@ -5,6 +5,7 @@ use sdl2_mixer::Music;
 use sdl2_ttf::Sdl2TtfContext; 
 use std::rc::Rc;
 
+
 /// Interface for interacting with the user. For example, obtaining user input, drawing to the
 /// screen and playing audio.
 pub struct Ui {

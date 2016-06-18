@@ -53,7 +53,7 @@ fn build() -> Game {
     // Initialize sdl_mixer for audio playback, then load and store the sounds we will use
     // in the game.
     let sdl_audio = sdl_ctx.audio().unwrap();
-    sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
+    let _ = sdl2_mixer::open_audio(DEFAULT_FREQUENCY, sdl2_mixer::AUDIO_S16LSB, 2, 1024);
     let ping_sound_path = Path::new("assets/sounds/ping.wav");
     let ping_sound = sdl2_mixer::Music::from_file(ping_sound_path).unwrap();
     let pong_sound_path = Path::new("assets/sounds/pong.wav");
