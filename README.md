@@ -1,10 +1,10 @@
-# Pongo [![Build Status](https://travis-ci.org/wickus/pongo.svg?branch=master)](https://travis-ci.org/wickus/chip8)
+# Pongo [![Build Status](https://travis-ci.org/machinetech/pongo.svg?branch=master)](https://travis-ci.org/machinetech/chip8)
 
-A Pong game written in the [Rust](http://www.rust-lang.org/) programming language. The project uses the [MIT](https://github.com/wickus/pongo/blob/master/LICENSE) license.
+A Pong game written in the [Rust](http://www.rust-lang.org/) programming language. The project uses the [MIT](https://github.com/machinetech/pongo/blob/master/LICENSE) license.
 
-[![Pongo](http://wickus.github.io/pongo/images/title.png)](https://youtu.be/VgHv11kGtdQ)
+[![Pongo](http://machinetech.github.io/pongo/images/title.png)](https://youtu.be/VgHv11kGtdQ)
 
-[![Pongo](http://wickus.github.io/pongo/images/game.png)](https://youtu.be/VgHv11kGtdQ)
+[![Pongo](http://machinetech.github.io/pongo/images/game.png)](https://youtu.be/VgHv11kGtdQ)
 
 There is also a short video clip of the game on [YouTube](https://youtu.be/VgHv11kGtdQ).
 
@@ -65,4 +65,4 @@ The color scheme used in the game was also inspired by the DJB Pokey Dots font.
 The song used during display of the title screen is called ['More Monkey Island Band'](http://soundimage.org/funny-2/more-monkey-island-band/) and is courtesy of Eric Matyas. 
 
 ## Reporting problems
-If anything should go wrong, please report the issue [here](https://github.com/wickus/pongo/issues) and I will look into it. Thanks!
+If anything should go wrong, please report the issue [here](https://github.com/machinetech/pongo/issues) and I will look into it. Thanks!

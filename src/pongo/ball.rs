@@ -95,7 +95,7 @@ impl Drawable for Ball {
         let x = self.x + self.diameter / 2.;
         let y = self.y + self.diameter / 2.;
         let radius = self.diameter / 2.;
-        ui.renderer.filled_circle(x as i16, y as i16, radius as i16, self.color);
+        let _ = ui.renderer.filled_circle(x as i16, y as i16, radius as i16, self.color);
     }
     
 }
