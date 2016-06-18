@@ -8,26 +8,15 @@ extern crate sdl2_image;
 extern crate sdl2_mixer;
 extern crate sdl2_ttf;
 
-use rand::distributions::{IndependentSample, Range};
-
-use sdl2::{AudioSubsystem, Sdl};
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::{Renderer, Texture};
 
-use sdl2_gfx::primitives::DrawRenderer;
-use sdl2_image::{LoadTexture, INIT_PNG}; 
+use sdl2_image::{INIT_PNG};
 use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Hinting, Sdl2TtfContext}; 
+use sdl2_ttf::{Font}; 
 
-use std::cell::RefCell;
 use std::f32;
 use std::path::Path;
 use std::rc::Rc;
-use std::thread;
-use std::vec::Vec;
 
 use pongo::ball::Ball;
 use pongo::game::Game;
@@ -118,7 +107,6 @@ fn build() -> Game {
     let font_path = Path::new("assets/fonts/pixel.ttf");
     let font = Rc::new(sdl2_ttf::Font::from_file(font_path, 128).unwrap());
     let score_board_width = screen_width / 2. - 100.;
-    let score_board_height = 65.;
     let score_board_x = screen_width / 2. - score_board_width / 2.;
     let score_board_y = 5.;
     let score_card_width = 80.;
