@@ -1,11 +1,3 @@
-extern crate clock_ticks;
-extern crate rand;
-extern crate sdl2;
-extern crate sdl2_gfx;
-extern crate sdl2_image;
-extern crate sdl2_mixer;
-extern crate sdl2_ttf;
-
 use pongo::ui::{Drawable,Ui};
 
 use sdl2::pixels::Color;

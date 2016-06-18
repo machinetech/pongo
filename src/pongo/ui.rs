@@ -1,18 +1,8 @@
-extern crate clock_ticks;
-extern crate rand;
-extern crate sdl2;
-extern crate sdl2_gfx;
-extern crate sdl2_image;
-extern crate sdl2_mixer;
-extern crate sdl2_ttf;
-
 use sdl2::{AudioSubsystem, Sdl};
 use sdl2::event::Event;
 use sdl2::render::Renderer;
-
 use sdl2_mixer::Music; 
 use sdl2_ttf::Sdl2TtfContext; 
-
 use std::rc::Rc;
 
 /// Interface for interacting with the user. For example, obtaining user input, drawing to the

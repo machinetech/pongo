@@ -1,52 +1,27 @@
-extern crate clock_ticks;
 extern crate rand;
-extern crate sdl2;
-extern crate sdl2_gfx;
-extern crate sdl2_image;
-extern crate sdl2_mixer;
-extern crate sdl2_ttf;
 
 use pongo::ui::{Drawable,Ui};
-
 use rand::distributions::{IndependentSample, Range};
-
-use sdl2::{AudioSubsystem, Sdl};
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::{Renderer, Texture};
-
 use sdl2_gfx::primitives::DrawRenderer;
-use sdl2_image::{LoadTexture, INIT_PNG}; 
-use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Hinting, Sdl2TtfContext}; 
-
-use std::cell::RefCell;
-use std::f32;
-use std::path::Path;
-use std::rc::Rc;
-use std::thread;
-use std::vec::Vec;
-
 use super::Resettable;
 
 // The ball is rendered as a circle, but treated as a square to simplify game mechanics. 
 pub struct Ball {
     pub color: Color,                   
-    pub initial_x: f32,                 // The initial x location. Stored so that we can reset the ball.
-    pub initial_y: f32,                 // The initial y location. Stored so that we can reset the ball.
-    pub x: f32,                         // x pixel coordinate of top left corner.
-    pub y: f32,                         // y pixel coordinate of top left corner.
-    pub diameter: f32,                   
-    pub speed: f32,                     // Speed in pixels per second. Never changes.
-    pub speed_multiplier: f32,          // Used to adjust the speed.
-    pub vx: f32,                        // Horizontal velocity in pixels per second.
-    pub vy: f32,                        // Vertical velocity in pixels per second.
-    pub max_launch_angle: f32,          // Maximum angle at which the ball will launch. 
-    pub max_bounce_angle: f32           // Maximum angle at which ball will bounce when hitting paddle.
-                                    // The angle is taken as up or down from an imaginary line
-                                    // running perpendicular to the paddle (i.o.w. running horizontal)
+    pub initial_x: f32,         // The initial x location. Stored so that we can reset the ball.
+    pub initial_y: f32,         // The initial y location. Stored so that we can reset the ball.
+    pub x: f32,                 // x pixel coordinate of top left corner.
+    pub y: f32,                 // y pixel coordinate of top left corner.
+    pub diameter: f32,           
+    pub speed: f32,             // Speed in pixels per second. Never changes.
+    pub speed_multiplier: f32,  // Used to adjust the speed.
+    pub vx: f32,                // Horizontal velocity in pixels per second.
+    pub vy: f32,                // Vertical velocity in pixels per second.
+    pub max_launch_angle: f32,  // Maximum angle at which the ball will launch. 
+    pub max_bounce_angle: f32   // Maximum angle at which ball will bounce when hitting paddle.
+                                // The angle is taken as up or down from an imaginary line
+                                // running perpendicular to the paddle (i.o.w. running horizontal)
 }
 
 impl Ball {
