@@ -12,22 +12,16 @@ use pongo::paddle::Paddle;
 use pongo::score_card::ScoreCard;
 use pongo::ui::{Drawable,Ui};
 
-use rand::distributions::{IndependentSample, Range};
-
-use sdl2::{AudioSubsystem, Sdl};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{Renderer, Texture};
 
-use sdl2_gfx::primitives::DrawRenderer;
-use sdl2_image::{LoadTexture, INIT_PNG}; 
-use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Hinting, Sdl2TtfContext}; 
+use sdl2_image::LoadTexture; 
+use sdl2_mixer::Music; 
+use sdl2_ttf::Font; 
 
 use std::cell::RefCell;
-use std::f32;
 use std::path::Path;
 use std::rc::Rc;
 use std::thread;
@@ -279,8 +273,7 @@ impl Game {
         }
 
         // Check to see if either the human (left paddle) or computer (right paddle) has won.
-        // todo. fix check for win.
-        self.check_for_win(ctx);
+        self.check_for_win();
     }
     
     /// Move the left paddle based on user input. 
@@ -548,7 +541,7 @@ impl Game {
         }
     }
 
-    fn check_for_win(&mut self, ctx: &mut GameLoopContext) {
+    fn check_for_win(&mut self) {
         let mut msg: Option<&str> = Option::None;
         let points_to_win = 5;
 
