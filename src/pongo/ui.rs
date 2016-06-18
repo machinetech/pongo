@@ -6,28 +6,14 @@ extern crate sdl2_image;
 extern crate sdl2_mixer;
 extern crate sdl2_ttf;
 
-use rand::distributions::{IndependentSample, Range};
-
 use sdl2::{AudioSubsystem, Sdl};
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::{Renderer, Texture};
+use sdl2::render::Renderer;
 
-use sdl2_gfx::primitives::DrawRenderer;
-use sdl2_image::{LoadTexture, INIT_PNG}; 
-use sdl2_mixer::{AUDIO_S16LSB, DEFAULT_FREQUENCY, Music}; 
-use sdl2_ttf::{Font, Hinting, Sdl2TtfContext}; 
+use sdl2_mixer::Music; 
+use sdl2_ttf::Sdl2TtfContext; 
 
-use std::cell::RefCell;
-use std::f32;
-use std::path::Path;
 use std::rc::Rc;
-use std::thread;
-use std::vec::Vec;
-
-use super::Resettable;
 
 /// Interface for interacting with the user. For example, obtaining user input, drawing to the
 /// screen and playing audio.
